@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CineMetrics — API Documentation</title>
+<style>
+  :root { --teal:#15616D; --navy:#073B4C; --orange:#FF7D00; --sage:#8AA79F; --bg:#E7ECEF; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Inter, Arial, sans-serif; background: var(--bg); color: var(--navy); margin:0; padding:0; }
+  header { background: var(--teal); color: white; padding: 2rem 1.5rem; }
+  header h1 { margin: 0; font-size: 1.75rem; }
+  header p { margin: .4rem 0 0; color: #cfe3e0; font-size: .9rem; }
+  main { max-width: 900px; margin: 2rem auto; padding: 0 1.5rem 3rem; }
+  section { background: white; border-radius: 16px; padding: 1.5rem 1.75rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  h2 { color: var(--teal); font-size: 1.1rem; margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: .5rem; }
+  .endpoint { padding: .6rem 0; border-bottom: 1px dashed #eee; }
+  .endpoint:last-child { border-bottom: none; }
+  .method { display:inline-block; background: var(--orange); color:white; font-size:.7rem; font-weight:700; padding:2px 8px; border-radius:6px; margin-right:.5rem; }
+  code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: .85rem; }
+  .desc { color:#555; font-size:.85rem; margin-top:.25rem; }
+  a.back { color: var(--teal); text-decoration:none; font-size:.85rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>CineMetrics API Documentation</h1>
+  <p>Flask backend — movie endpoints at <code>/api/...</code>, TV endpoints at <code>/api/tv/...</code>. All read-only (GET).</p>
+</header>
+<main>
+  <p><a class="back" href="/">&larr; Back to dashboard</a></p>
+
+  <section>
+    <h2>Movies — /api/...</h2>
+    <div class="endpoint"><span class="method">GET</span><code>/api/health</code><div class="desc">Dataset load status and total movie count.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/summary-stats</code><div class="desc">Headline KPIs: total movies, average rating, total revenue, average runtime.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/movie-rankings</code><div class="desc">Top 10 / Bottom 10 movies by weighted rating.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/genre-distribution</code><div class="desc">Top genres by movie count, with percentages.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/decade-trends</code><div class="desc">Average rating by release decade.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/production-companies-performance</code><div class="desc">Top production companies by total revenue.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/production-countries-performance</code><div class="desc">Top production countries by average rating.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/cult-classics?limit=&sample_size=</code><div class="desc">Popularity-vs-rating quadrant data: hidden gems, overrated, and a background sample.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/recommend?title=&n=</code><div class="desc">Content-based recommendations for a movie title. Falls back to a live TMDB lookup if the title isn't in the local dataset.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/model-metadata</code><div class="desc">Recommender build stats (indexed movie count, vocab size, thresholds).</div></div>
+  </section>
+
+  <section>
+    <h2>TV Shows — /api/tv/...</h2>
+    <div class="endpoint"><span class="method">GET</span><code>/api/tv/health</code><div class="desc">Dataset load status and total show count.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/tv/summary-stats</code><div class="desc">Headline KPIs: total shows, average rating, average episode runtime.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/tv/show-rankings</code><div class="desc">Top 10 / Bottom 10 shows by weighted rating (with a live TMDB season-count refresh for these ~20 shows).</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/tv/genre-distribution</code><div class="desc">Top genres by show count, with percentages.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/tv/decade-trends</code><div class="desc">Average rating by first-air decade.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/tv/network-performance</code><div class="desc">Top networks by show count and average rating.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/tv/production-companies-performance</code><div class="desc">Top production companies by show count and average rating (no revenue data exists for TV).</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/tv/production-countries-performance</code><div class="desc">Top production countries by average rating.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/tv/cult-classics?limit=&sample_size=</code><div class="desc">Same quadrant idea as movies, for shows.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/tv/recommend?title=&n=</code><div class="desc">Content-based recommendations for a TV show title, with the same live-TMDB fallback as movies.</div></div>
+    <div class="endpoint"><span class="method">GET</span><code>/api/tv/model-metadata</code><div class="desc">Recommender build stats for the TV pipeline.</div></div>
+  </section>
+
+  <section>
+    <h2>Notes</h2>
+    <p class="desc">All movie data sourced from TMDB_movie_dataset_v11 (Kaggle). All TV data sourced from the asaniczka Full TMDb TV Shows Dataset (Kaggle), both re-exported from TMDB's public API. This is a personal project, not a public-facing commercial API — endpoints are unauthenticated and intended for local development use only.</p>
+  </section>
+</main>
+</body>
+</html>
