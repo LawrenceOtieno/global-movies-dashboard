@@ -35,9 +35,7 @@ TMDB_GENRE_MAP = fetch_tmdb_genre_map("movie")
 if TMDB_GENRE_MAP:
     print(f"Movie TMDB live lookup enabled ({len(TMDB_GENRE_MAP)} genres loaded).")
 
-PARQUET_PATH = os.path.join(PROJECT_BACKEND_DIR, "..", "global_movies.parquet")
-if not os.path.exists(PARQUET_PATH):
-    PARQUET_PATH = os.path.join(PROJECT_BACKEND_DIR, "global_movies.parquet")
+PARQUET_PATH = os.path.join(PROJECT_BACKEND_DIR, "global_movies.parquet")
 
 VECTORIZER_PATH = os.path.join(PROJECT_BACKEND_DIR, "tfidf_vectorizer.pkl")
 NN_MODEL_PATH = os.path.join(PROJECT_BACKEND_DIR, "recommender_nn.pkl")
