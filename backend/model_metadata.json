@@ -1,0 +1,12 @@
+{
+  "model_type": "content-based recommender (TF-IDF + cosine kNN)",
+  "recommender_movie_count": 22794,
+  "recommender_vocab_size": 11100,
+  "min_votes_for_recommender": 70,
+  "min_votes_for_tension": 20,
+  "min_votes_for_ranking": 50,
+  "weighted_rating_formula": "WR = v/(v+m)*R + m/(v+m)*C",
+  "weighted_rating_m_90th_pct_vote_count": 5.0,
+  "weighted_rating_C_mean_vote_average": 1.885,
+  "total_movies_in_dataset": 1136706
+}
