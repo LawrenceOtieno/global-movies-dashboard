@@ -22,3 +22,8 @@ env/
 .flaskenv
 instance/
 .pytest_cache/
+TMDB_movie_dataset_v11
+TMDB_tv_dataset_v3
+*.csv
+
+.vscode/
