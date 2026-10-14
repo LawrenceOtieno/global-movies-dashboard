@@ -27,3 +27,8 @@ TMDB_tv_dataset_v3
 *.csv
 
 .vscode/
+# Large data & model files
+*.parquet
+*.pkl
+backend/model_metadata.json
+backend/tv_model_metadata.json
