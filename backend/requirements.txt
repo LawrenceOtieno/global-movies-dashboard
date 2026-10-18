@@ -1,10 +1,14 @@
 flask
 flask-cors
 flask-compress
+gunicorn
+sqlalchemy
+psycopg2-binary
 pandas
 pyarrow
 scikit-learn
 joblib
 requests
 python-dotenv
-gunicorn
+pinecone
+upstash-vector
