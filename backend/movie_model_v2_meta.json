@@ -1,0 +1,10 @@
+{
+  "vocab_size": 1536,
+  "pool_size": 22794,
+  "min_votes": 70,
+  "max_features": 1536,
+  "ngram_range": [
+    1,
+    2
+  ]
+}
