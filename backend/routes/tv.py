@@ -101,10 +101,9 @@ print(f"  Loaded TV analytics in {time.time() - _t0:.2f}s")
 print("Loading TV titles for in-memory matcher...")
 _t0 = time.time()
 with engine.connect() as conn:
-    # Load all shows with at least 5 votes — excludes placeholder rows
-    # but guarantees popular shows are included.
+    # FIX: Cast vote_count (TEXT) to INTEGER for comparison
     rows = conn.execute(text(
-        "SELECT DISTINCT name FROM tv_shows WHERE name IS NOT NULL AND vote_count >= 5"
+        "SELECT DISTINCT name FROM tv_shows WHERE name IS NOT NULL AND CAST(vote_count AS INTEGER) >= 5"
     )).fetchall()
 FUZZY_NAMES = [r[0] for r in rows if r[0]]
 print(f"  TV in-memory matcher ready: {len(FUZZY_NAMES):,} names in {time.time() - _t0:.1f}s")
@@ -154,7 +153,7 @@ def find_source_show(title: str):
                 WHEN LOWER(name) LIKE LOWER(:t) || '%' THEN 2
                 ELSE 3
             END,
-            vote_count DESC NULLS LAST
+            CAST(vote_count AS INTEGER) DESC NULLS LAST
         LIMIT 1
     """)
     with engine.connect() as conn:
@@ -166,7 +165,7 @@ def find_source_show(title: str):
     if fuzzy:
         q2 = text("""
             SELECT id, name, genres, created_by, primary_network, primary_production_company, original_language, vote_count, first_air_year
-            FROM tv_shows WHERE name = :t ORDER BY vote_count DESC NULLS LAST LIMIT 1
+            FROM tv_shows WHERE name = :t ORDER BY CAST(vote_count AS INTEGER) DESC NULLS LAST LIMIT 1
         """)
         with engine.connect() as conn:
             row = conn.execute(q2, {"t": fuzzy}).fetchone()

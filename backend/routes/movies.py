@@ -110,10 +110,9 @@ print(f"  Loaded analytics in {time.time() - _t0:.2f}s")
 print("Loading titles for in-memory matcher...")
 _t0 = time.time()
 with engine.connect() as conn:
-    # Load all movies with at least 5 votes — excludes placeholder rows
-    # but guarantees "Inception", "Breaking Bad", etc. are included.
+    # FIX: Cast vote_count (TEXT) to INTEGER for comparison
     rows = conn.execute(text(
-        "SELECT DISTINCT title FROM movies WHERE title IS NOT NULL AND vote_count >= 5"
+        "SELECT DISTINCT title FROM movies WHERE title IS NOT NULL AND CAST(vote_count AS INTEGER) >= 5"
     )).fetchall()
 FUZZY_TITLES = [r[0] for r in rows if r[0]]
 print(f"  In-memory matcher ready: {len(FUZZY_TITLES):,} titles in {time.time() - _t0:.1f}s")
@@ -168,7 +167,7 @@ def find_source_movie(title: str):
                 WHEN LOWER(title) LIKE LOWER(:t) || '%' THEN 2
                 ELSE 3
             END,
-            vote_count DESC NULLS LAST
+            CAST(vote_count AS INTEGER) DESC NULLS LAST
         LIMIT 1
     """)
     with engine.connect() as conn:
@@ -178,7 +177,7 @@ def find_source_movie(title: str):
 
     fuzzy = find_fuzzy_match(title)
     if fuzzy:
-        q2 = text(FULL_SELECT + " WHERE title = :t ORDER BY vote_count DESC NULLS LAST LIMIT 1")
+        q2 = text(FULL_SELECT + " WHERE title = :t ORDER BY CAST(vote_count AS INTEGER) DESC NULLS LAST LIMIT 1")
         with engine.connect() as conn:
             row = conn.execute(q2, {"t": fuzzy}).fetchone()
         if row:
