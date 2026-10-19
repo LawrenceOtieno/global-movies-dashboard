@@ -12,8 +12,6 @@ from flask import Blueprint, jsonify, request
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 from pinecone import Pinecone
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 
 from config import TMDB_API_KEY, TMDB_BASE_URL, fetch_tmdb_genre_map
 
@@ -42,7 +40,6 @@ if TMDB_TV_GENRE_MAP:
     print(f"TV TMDB live lookup enabled ({len(TMDB_TV_GENRE_MAP)} genres loaded).")
 
 MIN_SIMILARITY = 0.15
-FUZZY_THRESHOLD = 0.45  # Lowered for typo tolerance
 
 
 def safe_int(v):
@@ -100,32 +97,34 @@ CACHED_CULT_CLASSICS = load_cached('tv', 'cult_classics', {"hidden_gems": [], "o
 print(f"  Loaded TV analytics in {time.time() - _t0:.2f}s")
 
 
-# ---------- Fuzzy matcher ----------
-print("Building TV fuzzy title matcher...")
+# ---------- Fast In-Memory Title Matcher (difflib) ----------
+print("Loading TV titles for in-memory matcher...")
 _t0 = time.time()
 with engine.connect() as conn:
     rows = conn.execute(text(
-        "SELECT DISTINCT name, vote_count FROM tv_shows WHERE name IS NOT NULL ORDER BY vote_count DESC NULLS LAST LIMIT 1000"
+        "SELECT DISTINCT name FROM tv_shows WHERE name IS NOT NULL ORDER BY vote_count DESC NULLS LAST LIMIT 1000"
     )).fetchall()
 FUZZY_NAMES = [r[0] for r in rows if r[0]]
-
-fuzzy_vectorizer = None
-fuzzy_matrix = None
-if FUZZY_NAMES:
-    fuzzy_vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4))
-    fuzzy_matrix = fuzzy_vectorizer.fit_transform(FUZZY_NAMES)
-print(f"  TV fuzzy matcher ready: {len(FUZZY_NAMES):,} names in {time.time() - _t0:.1f}s")
+print(f"  TV in-memory matcher ready: {len(FUZZY_NAMES):,} names in {time.time() - _t0:.1f}s")
 
 
-def find_fuzzy_match(title: str, threshold: float = FUZZY_THRESHOLD):
-    if fuzzy_vectorizer is None or not FUZZY_NAMES:
+def find_fuzzy_match(title: str, threshold: float = 0.55):
+    """Uses Python's difflib for typo tolerance. Zero DB I/O."""
+    if not FUZZY_NAMES:
         return None
-    q = fuzzy_vectorizer.transform([title])
-    sims = cosine_similarity(q, fuzzy_matrix)[0]
-    best = sims.argmax()
-    if sims[best] >= threshold:
-        return FUZZY_NAMES[best]
-    return None
+    matches = difflib.get_close_matches(title, FUZZY_NAMES, n=1, cutoff=threshold)
+    return matches[0] if matches else None
+
+
+def suggest_similar_titles(title: str, limit: int = 5):
+    """In-memory suggestions. Zero DB I/O."""
+    if not FUZZY_NAMES:
+        return []
+    words = [w for w in title.lower().split() if len(w) > 2]
+    candidates = [t for t in FUZZY_NAMES if any(w in t.lower() for w in words)]
+    if not candidates:
+        candidates = FUZZY_NAMES
+    return difflib.get_close_matches(title, candidates, n=limit, cutoff=0.4)
 
 
 # ---------- Source show lookup ----------
@@ -161,36 +160,6 @@ def find_source_show(title: str):
             return dict(row._mapping)
 
     return None
-
-
-def find_loose_matches(title: str, limit: int = 5):
-    q = text("""
-        SELECT name FROM tv_shows
-        WHERE LOWER(name) LIKE '%' || LOWER(:t) || '%'
-        ORDER BY vote_count DESC NULLS LAST
-        LIMIT :lim
-    """)
-    with engine.connect() as conn:
-        rows = conn.execute(q, {"t": title, "lim": limit}).fetchall()
-    return [r[0] for r in rows]
-
-
-def suggest_similar_titles(title: str, limit: int = 5):
-    words = [w for w in title.lower().split() if len(w) > 2]
-    if not words: return []
-    pattern = "|".join(words)
-    q = text("""
-        SELECT DISTINCT name FROM tv_shows
-        WHERE name ~* :pat
-        LIMIT 5000
-    """)
-    try:
-        with engine.connect() as conn:
-            rows = conn.execute(q, {"pat": pattern}).fetchall()
-        candidates = [r[0] for r in rows if r[0]]
-    except Exception: return []
-    if not candidates: return []
-    return difflib.get_close_matches(title, candidates, n=limit, cutoff=0.5)
 
 
 def fetch_from_tmdb_tv_live(title: str):
@@ -294,18 +263,13 @@ def recommend():
 
     if not source_row:
         suggestions = []
-
+        
         fuzzy_title = find_fuzzy_match(title)
         if fuzzy_title:
             suggestions.append(fuzzy_title)
 
-        loose = find_loose_matches(title, limit=5)
-        for s in loose:
-            if s not in suggestions and len(suggestions) < 5:
-                suggestions.append(s)
-
-        for s in suggest_similar_titles(title, limit=5):
-            if s not in suggestions and len(suggestions) < 5:
+        for s in suggest_similar_titles(title, limit=4):
+            if s not in suggestions:
                 suggestions.append(s)
 
         msg = f"No show found matching '{title}'."
@@ -314,7 +278,7 @@ def recommend():
 
         return jsonify({
             "error": msg,
-            "suggestions": suggestions if suggestions else ["Try 'Breaking Bad', 'Game of Thrones', or 'The Office'."]
+            "suggestions": suggestions
         }), 404
 
     source_title = source_row["name"]
