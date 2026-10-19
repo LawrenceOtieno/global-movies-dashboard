@@ -276,11 +276,18 @@ def recommend():
     if not source_row:
         suggestions = []
         
+        # 1. Check TMDB for the typo
+        live = fetch_from_tmdb_tv_live(title)
+        if live and live["name"].lower() != title.lower():
+            suggestions.append(live["name"])
+
+        # 2. Check our in-memory list
         fuzzy_title = find_fuzzy_match(title)
-        if fuzzy_title:
+        if fuzzy_title and fuzzy_title not in suggestions:
             suggestions.append(fuzzy_title)
 
-        for s in suggest_similar_titles(title, limit=4):
+        # 3. Check loose matches
+        for s in suggest_similar_titles(title, limit=3):
             if s not in suggestions:
                 suggestions.append(s)
 
