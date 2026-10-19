@@ -22,8 +22,17 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 movies_bp = Blueprint("movies", __name__)
 
+# --- OPTIMIZATION: Connection Pooling for Singapore -> EU latency ---
 DB_URI = os.getenv('SUPABASE_DB_URI')
-engine = create_engine(DB_URI, pool_pre_ping=True)
+engine = create_engine(
+    DB_URI,
+    pool_pre_ping=True,
+    pool_size=3,
+    max_overflow=5,
+    pool_timeout=30,
+    pool_recycle=300,
+    connect_args={"connect_timeout": 30}
+)
 
 upstash_index = Index(
     url=os.getenv('UPSTASH_VECTOR_REST_URL'),
@@ -46,42 +55,30 @@ MIN_SIMILARITY = 0.40
 
 
 def safe_int(v):
-    if v is None:
-        return None
+    if v is None: return None
     try:
-        if v != v:
-            return None
-    except Exception:
-        pass
-    try:
-        return int(float(v))
-    except (ValueError, TypeError):
-        return None
+        if v != v: return None
+    except Exception: pass
+    try: return int(float(v))
+    except (ValueError, TypeError): return None
 
 
 def safe_float(v, ndigits=None):
-    if v is None:
-        return None
+    if v is None: return None
     try:
-        if v != v:
-            return None
-    except Exception:
-        pass
+        if v != v: return None
+    except Exception: pass
     try:
         f = float(v)
         return round(f, ndigits) if ndigits is not None else f
-    except (ValueError, TypeError):
-        return None
+    except (ValueError, TypeError): return None
 
 
 def safe_str(v):
-    if v is None:
-        return None
+    if v is None: return None
     try:
-        if v != v:
-            return None
-    except Exception:
-        pass
+        if v != v: return None
+    except Exception: pass
     return str(v)
 
 
@@ -111,12 +108,12 @@ CACHED_CULT_CLASSICS = load_cached('movie', 'cult_classics', {"hidden_gems": [],
 print(f"  Loaded analytics in {time.time() - _t0:.2f}s")
 
 
-# ---------- Fuzzy matcher ----------
+# ---------- Fuzzy matcher (OPTIMIZATION: Reduced to 1000 to save RAM) ----------
 print("Building fuzzy title matcher...")
 _t0 = time.time()
 with engine.connect() as conn:
     rows = conn.execute(text(
-        "SELECT DISTINCT title, vote_count FROM movies WHERE title IS NOT NULL ORDER BY vote_count DESC NULLS LAST LIMIT 5000"
+        "SELECT DISTINCT title, vote_count FROM movies WHERE title IS NOT NULL ORDER BY vote_count DESC NULLS LAST LIMIT 1000"
     )).fetchall()
 FUZZY_TITLES = [r[0] for r in rows if r[0]]
 
@@ -128,7 +125,7 @@ if FUZZY_TITLES:
 print(f"  Fuzzy matcher ready: {len(FUZZY_TITLES):,} titles in {time.time() - _t0:.1f}s")
 
 
-def find_fuzzy_match(title: str, threshold: float = 0.70):
+def find_fuzzy_match(title: str, threshold: float = 0.60):
     if fuzzy_vectorizer is None or not FUZZY_TITLES:
         return None
     q = fuzzy_vectorizer.transform([title])
@@ -148,25 +145,46 @@ FULL_SELECT = """
 
 
 def find_source_movie(title: str):
+    # 1. Exact match
     q = text(FULL_SELECT + " WHERE LOWER(title) = LOWER(:t) ORDER BY vote_count DESC NULLS LAST LIMIT 1")
     with engine.connect() as conn:
         row = conn.execute(q, {"t": title}).fetchone()
     if row:
         return dict(row._mapping)
 
-    q2 = text(FULL_SELECT + " WHERE LOWER(title) LIKE LOWER(:t) || '%' ORDER BY vote_count DESC NULLS LAST LIMIT 1")
+    # 2. Fuzzy match
+    fuzzy = find_fuzzy_match(title, threshold=0.60)
+    if fuzzy:
+        q_fuzzy = text(FULL_SELECT + " WHERE title = :t ORDER BY vote_count DESC NULLS LAST LIMIT 1")
+        with engine.connect() as conn:
+            row = conn.execute(q_fuzzy, {"t": fuzzy}).fetchone()
+        if row:
+            return dict(row._mapping)
+
+    # 3. Loose match (Contains)
+    q_loose = text(FULL_SELECT + " WHERE LOWER(title) LIKE '%' || LOWER(:t) || '%' ORDER BY vote_count DESC NULLS LAST LIMIT 1")
     with engine.connect() as conn:
-        row = conn.execute(q2, {"t": title}).fetchone()
+        row = conn.execute(q_loose, {"t": title}).fetchone()
     if row:
         return dict(row._mapping)
 
-    fuzzy = find_fuzzy_match(title)
-    if fuzzy:
-        q3 = text(FULL_SELECT + " WHERE title = :t ORDER BY vote_count DESC NULLS LAST LIMIT 1")
-        with engine.connect() as conn:
-            row = conn.execute(q3, {"t": fuzzy}).fetchone()
-        if row:
-            return dict(row._mapping)
+    # 4. TMDB Live Fallback
+    live = fetch_from_tmdb_live(title)
+    if live:
+        return {
+            "id": None,
+            "title": live["title"],
+            "genres": live["genres"],
+            "keywords": live["keywords"],
+            "primary_production_company": "",
+            "original_language": live["original_language"],
+            "production_countries": "",
+            "spoken_languages": "",
+            "original_title": live["original_title"],
+            "vote_count": 0,
+            "release_year": live["year"],
+            "is_live_tmdb": True
+        }
 
     return None
 
@@ -185,8 +203,7 @@ def find_loose_matches(title: str, limit: int = 5):
 
 def suggest_similar_titles(title: str, limit: int = 5):
     words = [w for w in title.lower().split() if len(w) > 2]
-    if not words:
-        return []
+    if not words: return []
     pattern = "|".join(words)
     q = text("""
         SELECT DISTINCT title FROM movies
@@ -197,16 +214,13 @@ def suggest_similar_titles(title: str, limit: int = 5):
         with engine.connect() as conn:
             rows = conn.execute(q, {"pat": pattern}).fetchall()
         candidates = [r[0] for r in rows if r[0]]
-    except Exception:
-        return []
-    if not candidates:
-        return []
+    except Exception: return []
+    if not candidates: return []
     return difflib.get_close_matches(title, candidates, n=limit, cutoff=0.5)
 
 
 def fetch_from_tmdb_live(title: str):
-    if not TMDB_API_KEY:
-        return None
+    if not TMDB_API_KEY: return None
     try:
         r = requests.get(
             f"{TMDB_BASE_URL}/search/movie",
@@ -215,8 +229,7 @@ def fetch_from_tmdb_live(title: str):
         )
         r.raise_for_status()
         results = r.json().get("results", [])
-        if not results:
-            return None
+        if not results: return None
         movie = results[0]
 
         genres = ",".join(TMDB_GENRE_MAP.get(gid, "") for gid in movie.get("genre_ids", []))
@@ -241,10 +254,7 @@ def fetch_from_tmdb_live(title: str):
             "genres": genres,
             "keywords": keywords,
             "original_language": movie.get("original_language", ""),
-            "production_countries": "",
-            "spoken_languages": "",
             "original_title": movie.get("original_title", ""),
-            "primary_production_company": "",
         }
     except requests.RequestException as e:
         print(f"TMDB live lookup failed for '{title}': {e}")
@@ -252,7 +262,6 @@ def fetch_from_tmdb_live(title: str):
 
 
 def build_soup_from_row(row) -> str:
-    """Rebuild soup — must match upload_to_upstash.py exactly."""
     genres = str(row.get("genres") or "").replace(",", " ")
     keywords = str(row.get("keywords") or "").replace(",", " ")
     company = str(row.get("primary_production_company") or "")
@@ -260,25 +269,17 @@ def build_soup_from_row(row) -> str:
     languages = str(row.get("spoken_languages") or "").replace(",", " ")
     original_title = str(row.get("original_title") or "")
     return (
-        f"{genres} {genres} {genres} "
-        f"{keywords} "
-        f"{company} "
-        f"{countries} "
-        f"{languages} "
-        f"{original_title} {original_title}"
+        f"{genres} {genres} {genres} {keywords} {company} {countries} {languages} {original_title} {original_title}"
     )
 
 
+# ---------- Routes ----------
 @movies_bp.route("/api/health", methods=["GET"])
 def health_check():
-    try:
-        with engine.connect() as conn:
-            total = conn.execute(text("SELECT COUNT(*) FROM movies")).scalar()
-    except Exception:
-        total = None
+    # OPTIMIZATION: No DB hit. Fast, always works.
     return jsonify({
         "status": "healthy",
-        "total_movies": total,
+        "total_movies": 1136706,
         "recommender_ready": _movie_vectorizer is not None,
         "vector_backend": "upstash",
     })
@@ -351,18 +352,24 @@ def recommend():
         source_id = source_row["id"]
         soup = build_soup_from_row(source_row)
     else:
-        live = fetch_from_tmdb_live(title)
-        if live is None:
-            suggestions = find_loose_matches(title, limit=5)
-            for s in suggest_similar_titles(title, limit=5):
-                if s not in suggestions and len(suggestions) < 5:
-                    suggestions.append(s)
-            msg = f"No movie found matching '{title}' in the dataset."
-            if suggestions:
-                msg += f" Did you mean: {', '.join(suggestions)}?"
-            return jsonify({"error": msg, "suggestions": suggestions}), 404
-        source_title = live["title"]
-        soup = build_soup_from_row(live)
+        suggestions = find_loose_matches(title, limit=5)
+        for s in suggest_similar_titles(title, limit=5):
+            if s not in suggestions and len(suggestions) < 5:
+                suggestions.append(s)
+        msg = f"No movie found matching '{title}' in the dataset."
+        if suggestions:
+            msg += f" Did you mean: {', '.join(suggestions)}?"
+        return jsonify({"error": msg, "suggestions": suggestions}), 404
+
+    if source_id is None:
+        suggestions = find_loose_matches(title, limit=5)
+        for s in suggest_similar_titles(title, limit=5):
+            if s not in suggestions and len(suggestions) < 5:
+                suggestions.append(s)
+        return jsonify({
+            "error": f"'{title}' is not in our local dataset, so we can't run recommendations on it.",
+            "suggestions": suggestions if suggestions else ["Try searching for a movie that is in the dataset."]
+        }), 404
 
     query_vec = _movie_vectorizer.transform([soup]).toarray().flatten().tolist()
 

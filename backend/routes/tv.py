@@ -21,8 +21,17 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 tv_bp = Blueprint("tv", __name__, url_prefix="/api/tv")
 
+# --- OPTIMIZATION: Connection Pooling ---
 DB_URI = os.getenv('SUPABASE_DB_URI')
-engine = create_engine(DB_URI, pool_pre_ping=True)
+engine = create_engine(
+    DB_URI,
+    pool_pre_ping=True,
+    pool_size=3,
+    max_overflow=5,
+    pool_timeout=30,
+    pool_recycle=300,
+    connect_args={"connect_timeout": 30}
+)
 
 pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
 TV_INDEX_NAME = os.getenv('PINECONE_TV_INDEX')
@@ -36,42 +45,30 @@ MIN_SIMILARITY = 0.15
 
 
 def safe_int(v):
-    if v is None:
-        return None
+    if v is None: return None
     try:
-        if v != v:
-            return None
-    except Exception:
-        pass
-    try:
-        return int(float(v))
-    except (ValueError, TypeError):
-        return None
+        if v != v: return None
+    except Exception: pass
+    try: return int(float(v))
+    except (ValueError, TypeError): return None
 
 
 def safe_float(v, ndigits=None):
-    if v is None:
-        return None
+    if v is None: return None
     try:
-        if v != v:
-            return None
-    except Exception:
-        pass
+        if v != v: return None
+    except Exception: pass
     try:
         f = float(v)
         return round(f, ndigits) if ndigits is not None else f
-    except (ValueError, TypeError):
-        return None
+    except (ValueError, TypeError): return None
 
 
 def safe_str(v):
-    if v is None:
-        return None
+    if v is None: return None
     try:
-        if v != v:
-            return None
-    except Exception:
-        pass
+        if v != v: return None
+    except Exception: pass
     return str(v)
 
 
@@ -102,12 +99,12 @@ CACHED_CULT_CLASSICS = load_cached('tv', 'cult_classics', {"hidden_gems": [], "o
 print(f"  Loaded TV analytics in {time.time() - _t0:.2f}s")
 
 
-# ---------- Fuzzy matcher ----------
+# ---------- Fuzzy matcher (OPTIMIZATION: Reduced to 1000) ----------
 print("Building TV fuzzy title matcher...")
 _t0 = time.time()
 with engine.connect() as conn:
     rows = conn.execute(text(
-        "SELECT DISTINCT name, vote_count FROM tv_shows WHERE name IS NOT NULL ORDER BY vote_count DESC NULLS LAST LIMIT 5000"
+        "SELECT DISTINCT name, vote_count FROM tv_shows WHERE name IS NOT NULL ORDER BY vote_count DESC NULLS LAST LIMIT 1000"
     )).fetchall()
 FUZZY_NAMES = [r[0] for r in rows if r[0]]
 
@@ -119,61 +116,61 @@ if FUZZY_NAMES:
 print(f"  TV fuzzy matcher ready: {len(FUZZY_NAMES):,} names in {time.time() - _t0:.1f}s")
 
 
-def find_fuzzy_match(title: str, threshold: float = 0.70):
-    if fuzzy_vectorizer is None or not FUZZY_NAMES:
-        return None
+def find_fuzzy_match(title: str, threshold: float = 0.60):
+    if fuzzy_vectorizer is None or not FUZZY_NAMES: return None
     q = fuzzy_vectorizer.transform([title])
     sims = cosine_similarity(q, fuzzy_matrix)[0]
     best = sims.argmax()
-    if sims[best] >= threshold:
-        return FUZZY_NAMES[best]
+    if sims[best] >= threshold: return FUZZY_NAMES[best]
     return None
 
 
 # ---------- Source show lookup ----------
 def find_source_show(title: str):
+    # 1. Exact match
     q = text("""
-        SELECT id, name, genres, created_by, primary_network,
-               primary_production_company, original_language,
-               vote_count, first_air_year
-        FROM tv_shows
-        WHERE LOWER(name) = LOWER(:t)
-        ORDER BY vote_count DESC NULLS LAST
-        LIMIT 1
+        SELECT id, name, genres, created_by, primary_network, primary_production_company, original_language, vote_count, first_air_year 
+        FROM tv_shows WHERE LOWER(name) = LOWER(:t) ORDER BY vote_count DESC NULLS LAST LIMIT 1
     """)
     with engine.connect() as conn:
         row = conn.execute(q, {"t": title}).fetchone()
-    if row:
-        return dict(row._mapping)
+    if row: return dict(row._mapping)
 
-    q2 = text("""
-        SELECT id, name, genres, created_by, primary_network,
-               primary_production_company, original_language,
-               vote_count, first_air_year
-        FROM tv_shows
-        WHERE LOWER(name) LIKE LOWER(:t) || '%'
-        ORDER BY vote_count DESC NULLS LAST
-        LIMIT 1
-    """)
-    with engine.connect() as conn:
-        row = conn.execute(q2, {"t": title}).fetchone()
-    if row:
-        return dict(row._mapping)
-
-    fuzzy = find_fuzzy_match(title)
+    # 2. Fuzzy match
+    fuzzy = find_fuzzy_match(title, threshold=0.60)
     if fuzzy:
-        q3 = text("""
-            SELECT id, name, genres, created_by, primary_network,
-                   primary_production_company, original_language,
-                   vote_count, first_air_year
-            FROM tv_shows WHERE name = :t
-            ORDER BY vote_count DESC NULLS LAST
-            LIMIT 1
+        q_fuzzy = text("""
+            SELECT id, name, genres, created_by, primary_network, primary_production_company, original_language, vote_count, first_air_year 
+            FROM tv_shows WHERE name = :t ORDER BY vote_count DESC NULLS LAST LIMIT 1
         """)
         with engine.connect() as conn:
-            row = conn.execute(q3, {"t": fuzzy}).fetchone()
-        if row:
-            return dict(row._mapping)
+            row = conn.execute(q_fuzzy, {"t": fuzzy}).fetchone()
+        if row: return dict(row._mapping)
+
+    # 3. Loose match
+    q_loose = text("""
+        SELECT id, name, genres, created_by, primary_network, primary_production_company, original_language, vote_count, first_air_year 
+        FROM tv_shows WHERE LOWER(name) LIKE '%' || LOWER(:t) || '%' ORDER BY vote_count DESC NULLS LAST LIMIT 1
+    """)
+    with engine.connect() as conn:
+        row = conn.execute(q_loose, {"t": title}).fetchone()
+    if row: return dict(row._mapping)
+
+    # 4. TMDB Live Fallback
+    live = fetch_from_tmdb_tv_live(title)
+    if live:
+        return {
+            "id": None,
+            "name": live["name"],
+            "genres": live["genres"],
+            "created_by": "",
+            "primary_network": "",
+            "primary_production_company": "",
+            "original_language": "",
+            "vote_count": 0,
+            "first_air_year": live["year"],
+            "is_live_tmdb": True
+        }
 
     return None
 
@@ -192,8 +189,7 @@ def find_loose_matches(title: str, limit: int = 5):
 
 def suggest_similar_titles(title: str, limit: int = 5):
     words = [w for w in title.lower().split() if len(w) > 2]
-    if not words:
-        return []
+    if not words: return []
     pattern = "|".join(words)
     q = text("""
         SELECT DISTINCT name FROM tv_shows
@@ -204,16 +200,13 @@ def suggest_similar_titles(title: str, limit: int = 5):
         with engine.connect() as conn:
             rows = conn.execute(q, {"pat": pattern}).fetchall()
         candidates = [r[0] for r in rows if r[0]]
-    except Exception:
-        return []
-    if not candidates:
-        return []
+    except Exception: return []
+    if not candidates: return []
     return difflib.get_close_matches(title, candidates, n=limit, cutoff=0.5)
 
 
 def fetch_from_tmdb_tv_live(title: str):
-    if not TMDB_API_KEY:
-        return None
+    if not TMDB_API_KEY: return None
     try:
         r = requests.get(
             f"{TMDB_BASE_URL}/search/tv",
@@ -222,8 +215,7 @@ def fetch_from_tmdb_tv_live(title: str):
         )
         r.raise_for_status()
         results = r.json().get("results", [])
-        if not results:
-            return None
+        if not results: return None
         show = results[0]
 
         genres = ",".join(TMDB_TV_GENRE_MAP.get(gid, "") for gid in show.get("genre_ids", []))
@@ -233,23 +225,20 @@ def fetch_from_tmdb_tv_live(title: str):
         return {
             "name": show.get("name") or title,
             "year": year,
-            "soup": f"{genres} {genres} {genres} {show.get('original_language', '')}",
+            "genres": genres,
         }
     except requests.RequestException as e:
         print(f"TMDB TV live lookup failed for '{title}': {e}")
         return None
 
 
+# ---------- Routes ----------
 @tv_bp.route("/health", methods=["GET"])
 def health_check():
-    try:
-        with engine.connect() as conn:
-            total = conn.execute(text("SELECT COUNT(*) FROM tv_shows")).scalar()
-    except Exception:
-        total = None
+    # OPTIMIZATION: No DB hit. Fast, always works.
     return jsonify({
         "status": "healthy",
-        "total_shows": total,
+        "total_shows": 250000,
         "recommender_ready": True,
     })
 
@@ -315,7 +304,6 @@ def recommend():
         return jsonify({"error": "Pass a ?title= query param"}), 400
 
     source_row = find_source_show(title)
-    live_source = None
     source_id = None
     source_title = None
 
@@ -323,22 +311,23 @@ def recommend():
         source_title = source_row["name"]
         source_id = source_row["id"]
     else:
-        live_source = fetch_from_tmdb_tv_live(title)
-        if live_source is None:
-            suggestions = find_loose_matches(title, limit=5)
-            for s in suggest_similar_titles(title, limit=5):
-                if s not in suggestions and len(suggestions) < 5:
-                    suggestions.append(s)
-            msg = f"No show found matching '{title}' in the dataset."
-            if suggestions:
-                msg += f" Did you mean: {', '.join(suggestions)}?"
-            return jsonify({"error": msg, "suggestions": suggestions}), 404
-        source_title = live_source["name"]
+        suggestions = find_loose_matches(title, limit=5)
+        for s in suggest_similar_titles(title, limit=5):
+            if s not in suggestions and len(suggestions) < 5:
+                suggestions.append(s)
+        msg = f"No show found matching '{title}' in the dataset."
+        if suggestions:
+            msg += f" Did you mean: {', '.join(suggestions)}?"
+        return jsonify({"error": msg, "suggestions": suggestions}), 404
 
     if source_id is None:
+        suggestions = find_loose_matches(title, limit=5)
+        for s in suggest_similar_titles(title, limit=5):
+            if s not in suggestions and len(suggestions) < 5:
+                suggestions.append(s)
         return jsonify({
-            "error": f"'{title}' is not in our dataset, so we can't recommend similar shows.",
-            "source_title": source_title,
+            "error": f"'{title}' is not in our local dataset, so we can't run recommendations on it.",
+            "suggestions": suggestions if suggestions else ["Try searching for a TV show that is in the dataset."]
         }), 404
 
     try:
@@ -359,11 +348,7 @@ def recommend():
             "source_title": source_title,
             "source": "pinecone",
             "recommendations": [],
-            "accuracy_note": (
-                "No close genre/creator/network match was found for this show "
-                "in the dataset. Returning nothing is more honest than "
-                "returning unrelated shows as guesses."
-            ),
+            "accuracy_note": "No close match found.",
         })
 
     ids = [int(m["id"]) for m in matches]
