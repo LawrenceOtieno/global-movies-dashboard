@@ -106,7 +106,7 @@ CACHED_CULT_CLASSICS = load_cached('movie', 'cult_classics', {"hidden_gems": [],
 print(f"  Loaded analytics in {time.time() - _t0:.2f}s")
 
 
-# ---------- Fast In-Memory Title Matcher (difflib) ----------
+# ---------- Fast In-Memory Title Matcher ----------
 print("Loading titles for in-memory matcher...")
 _t0 = time.time()
 with engine.connect() as conn:
@@ -117,12 +117,24 @@ FUZZY_TITLES = [r[0] for r in rows if r[0]]
 print(f"  In-memory matcher ready: {len(FUZZY_TITLES):,} titles in {time.time() - _t0:.1f}s")
 
 
-def find_fuzzy_match(title: str, threshold: float = 0.70):
-    """Uses Python's difflib for typo tolerance. Zero DB I/O. Cutoff 0.70 prevents false positives."""
+def find_fuzzy_match(title: str, threshold: float = 0.75):
+    """Custom sequence matching. Guarantees finding the best match without difflib's cutoff bugs."""
     if not FUZZY_TITLES:
         return None
-    matches = difflib.get_close_matches(title, FUZZY_TITLES, n=1, cutoff=threshold)
-    return matches[0] if matches else None
+    
+    best_match = None
+    best_score = 0.0
+    title_lower = title.lower()
+    
+    for candidate in FUZZY_TITLES:
+        score = difflib.SequenceMatcher(None, title_lower, candidate.lower()).ratio()
+        if score > best_score:
+            best_score = score
+            best_match = candidate
+            
+    if best_score >= threshold:
+        return best_match
+    return None
 
 
 def suggest_similar_titles(title: str, limit: int = 5):
