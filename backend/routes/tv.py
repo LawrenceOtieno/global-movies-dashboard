@@ -42,6 +42,7 @@ if TMDB_TV_GENRE_MAP:
     print(f"TV TMDB live lookup enabled ({len(TMDB_TV_GENRE_MAP)} genres loaded).")
 
 MIN_SIMILARITY = 0.15
+FUZZY_THRESHOLD = 0.45  # Lowered for typo tolerance
 
 
 def safe_int(v):
@@ -116,7 +117,7 @@ if FUZZY_NAMES:
 print(f"  TV fuzzy matcher ready: {len(FUZZY_NAMES):,} names in {time.time() - _t0:.1f}s")
 
 
-def find_fuzzy_match(title: str, threshold: float = 0.55):
+def find_fuzzy_match(title: str, threshold: float = FUZZY_THRESHOLD):
     if fuzzy_vectorizer is None or not FUZZY_NAMES:
         return None
     q = fuzzy_vectorizer.transform([title])
@@ -148,7 +149,7 @@ def find_source_show(title: str):
     if row:
         return dict(row._mapping)
 
-    fuzzy = find_fuzzy_match(title, threshold=0.55)
+    fuzzy = find_fuzzy_match(title)
     if fuzzy:
         q2 = text("""
             SELECT id, name, genres, created_by, primary_network, primary_production_company, original_language, vote_count, first_air_year
@@ -293,8 +294,8 @@ def recommend():
 
     if not source_row:
         suggestions = []
-        
-        fuzzy_title = find_fuzzy_match(title, threshold=0.55)
+
+        fuzzy_title = find_fuzzy_match(title)
         if fuzzy_title:
             suggestions.append(fuzzy_title)
 
@@ -302,7 +303,7 @@ def recommend():
         for s in loose:
             if s not in suggestions and len(suggestions) < 5:
                 suggestions.append(s)
-        
+
         for s in suggest_similar_titles(title, limit=5):
             if s not in suggestions and len(suggestions) < 5:
                 suggestions.append(s)

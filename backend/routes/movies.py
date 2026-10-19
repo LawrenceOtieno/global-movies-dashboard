@@ -52,6 +52,7 @@ if TMDB_GENRE_MAP:
     print(f"Movie TMDB live lookup enabled ({len(TMDB_GENRE_MAP)} genres loaded).")
 
 MIN_SIMILARITY = 0.40
+FUZZY_THRESHOLD = 0.45  # Lowered for typo tolerance
 
 
 def safe_int(v):
@@ -125,7 +126,7 @@ if FUZZY_TITLES:
 print(f"  Fuzzy matcher ready: {len(FUZZY_TITLES):,} titles in {time.time() - _t0:.1f}s")
 
 
-def find_fuzzy_match(title: str, threshold: float = 0.55):
+def find_fuzzy_match(title: str, threshold: float = FUZZY_THRESHOLD):
     if fuzzy_vectorizer is None or not FUZZY_TITLES:
         return None
     q = fuzzy_vectorizer.transform([title])
@@ -162,7 +163,7 @@ def find_source_movie(title: str):
     if row:
         return dict(row._mapping)
 
-    fuzzy = find_fuzzy_match(title, threshold=0.55)
+    fuzzy = find_fuzzy_match(title)
     if fuzzy:
         q2 = text(FULL_SELECT + " WHERE title = :t ORDER BY vote_count DESC NULLS LAST LIMIT 1")
         with engine.connect() as conn:
@@ -329,20 +330,17 @@ def recommend():
     source_row = find_source_movie(title)
 
     if not source_row:
-        # 1. Try fuzzy match directly for suggestions
         suggestions = []
-        
-        fuzzy_title = find_fuzzy_match(title, threshold=0.55)
+
+        fuzzy_title = find_fuzzy_match(title)
         if fuzzy_title:
             suggestions.append(fuzzy_title)
 
-        # 2. Get loose substring matches
         loose = find_loose_matches(title, limit=5)
         for s in loose:
             if s not in suggestions and len(suggestions) < 5:
                 suggestions.append(s)
-        
-        # 3. Fallback suggestions
+
         for s in suggest_similar_titles(title, limit=5):
             if s not in suggestions and len(suggestions) < 5:
                 suggestions.append(s)
@@ -350,7 +348,7 @@ def recommend():
         msg = f"No movie found matching '{title}'."
         if suggestions:
             msg += f" Did you mean: {', '.join(suggestions[:3])}?"
-        
+
         return jsonify({
             "error": msg,
             "suggestions": suggestions if suggestions else ["Try 'Inception', 'Toy Story', or 'The Dark Knight'."]
