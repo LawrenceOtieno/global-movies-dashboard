@@ -110,8 +110,9 @@ print(f"  Loaded analytics in {time.time() - _t0:.2f}s")
 print("Loading titles for in-memory matcher...")
 _t0 = time.time()
 with engine.connect() as conn:
+    # FIX: Added vote_count to SELECT to satisfy Postgres DISTINCT rule
     rows = conn.execute(text(
-        "SELECT DISTINCT title FROM movies WHERE title IS NOT NULL ORDER BY vote_count DESC NULLS LAST LIMIT 1000"
+        "SELECT DISTINCT title, vote_count FROM movies WHERE title IS NOT NULL ORDER BY vote_count DESC NULLS LAST LIMIT 1000"
     )).fetchall()
 FUZZY_TITLES = [r[0] for r in rows if r[0]]
 print(f"  In-memory matcher ready: {len(FUZZY_TITLES):,} titles in {time.time() - _t0:.1f}s")
@@ -121,7 +122,6 @@ def find_fuzzy_match(title: str, threshold: float = 0.55):
     """Uses Python's difflib for typo tolerance. Zero DB I/O."""
     if not FUZZY_TITLES:
         return None
-    # cutoff is 0-1. 0.55 catches moderate typos like "Incepton" vs "Inception"
     matches = difflib.get_close_matches(title, FUZZY_TITLES, n=1, cutoff=threshold)
     return matches[0] if matches else None
 
@@ -302,12 +302,10 @@ def recommend():
     if not source_row:
         suggestions = []
         
-        # Fuzzy match first (in-memory, no DB hit)
         fuzzy_title = find_fuzzy_match(title)
         if fuzzy_title:
             suggestions.append(fuzzy_title)
             
-        # Then fill remaining suggestions
         for s in suggest_similar_titles(title, limit=4):
             if s not in suggestions:
                 suggestions.append(s)
