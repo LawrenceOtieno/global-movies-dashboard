@@ -101,8 +101,9 @@ print(f"  Loaded TV analytics in {time.time() - _t0:.2f}s")
 print("Loading TV titles for in-memory matcher...")
 _t0 = time.time()
 with engine.connect() as conn:
+    # Increased to 5000 to ensure popular shows are captured
     rows = conn.execute(text(
-        "SELECT DISTINCT name, vote_count FROM tv_shows WHERE name IS NOT NULL ORDER BY vote_count DESC NULLS LAST LIMIT 1000"
+        "SELECT DISTINCT name, vote_count FROM tv_shows WHERE name IS NOT NULL ORDER BY vote_count DESC NULLS LAST LIMIT 5000"
     )).fetchall()
 FUZZY_NAMES = [r[0] for r in rows if r[0]]
 print(f"  TV in-memory matcher ready: {len(FUZZY_NAMES):,} names in {time.time() - _t0:.1f}s")
@@ -112,17 +113,17 @@ def find_fuzzy_match(title: str, threshold: float = 0.75):
     """Custom sequence matching. Guarantees finding the best match without difflib's cutoff bugs."""
     if not FUZZY_NAMES:
         return None
-    
+
     best_match = None
     best_score = 0.0
     title_lower = title.lower()
-    
+
     for candidate in FUZZY_NAMES:
         score = difflib.SequenceMatcher(None, title_lower, candidate.lower()).ratio()
         if score > best_score:
             best_score = score
             best_match = candidate
-            
+
     if best_score >= threshold:
         return best_match
     return None
@@ -275,19 +276,14 @@ def recommend():
 
     if not source_row:
         suggestions = []
-        
-        # 1. Check TMDB for the typo
-        live = fetch_from_tmdb_tv_live(title)
-        if live and live["name"].lower() != title.lower():
-            suggestions.append(live["name"])
 
-        # 2. Check our in-memory list
-        fuzzy_title = find_fuzzy_match(title)
-        if fuzzy_title and fuzzy_title not in suggestions:
+        # 1. In-memory matcher
+        fuzzy_title = find_fuzzy_match(title, threshold=0.75)
+        if fuzzy_title:
             suggestions.append(fuzzy_title)
 
-        # 3. Check loose matches
-        for s in suggest_similar_titles(title, limit=3):
+        # 2. Loose matches
+        for s in suggest_similar_titles(title, limit=4):
             if s not in suggestions:
                 suggestions.append(s)
 
