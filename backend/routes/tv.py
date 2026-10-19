@@ -116,7 +116,7 @@ if FUZZY_NAMES:
 print(f"  TV fuzzy matcher ready: {len(FUZZY_NAMES):,} names in {time.time() - _t0:.1f}s")
 
 
-def find_fuzzy_match(title: str, threshold: float = 0.60):
+def find_fuzzy_match(title: str, threshold: float = 0.55):
     if fuzzy_vectorizer is None or not FUZZY_NAMES:
         return None
     q = fuzzy_vectorizer.transform([title])
@@ -148,7 +148,7 @@ def find_source_show(title: str):
     if row:
         return dict(row._mapping)
 
-    fuzzy = find_fuzzy_match(title, threshold=0.60)
+    fuzzy = find_fuzzy_match(title, threshold=0.55)
     if fuzzy:
         q2 = text("""
             SELECT id, name, genres, created_by, primary_network, primary_production_company, original_language, vote_count, first_air_year
@@ -292,16 +292,24 @@ def recommend():
     source_row = find_source_show(title)
 
     if not source_row:
-        suggestions = find_loose_matches(title, limit=5)
+        suggestions = []
+        
+        fuzzy_title = find_fuzzy_match(title, threshold=0.55)
+        if fuzzy_title:
+            suggestions.append(fuzzy_title)
+
+        loose = find_loose_matches(title, limit=5)
+        for s in loose:
+            if s not in suggestions and len(suggestions) < 5:
+                suggestions.append(s)
+        
         for s in suggest_similar_titles(title, limit=5):
             if s not in suggestions and len(suggestions) < 5:
                 suggestions.append(s)
 
-        live = fetch_from_tmdb_tv_live(title)
-        if live:
-            msg = f"'{title}' exists in TMDB but isn't in our top-22k dataset. Try one of the similar shows below."
-        else:
-            msg = f"No show found matching '{title}'."
+        msg = f"No show found matching '{title}'."
+        if suggestions:
+            msg += f" Did you mean: {', '.join(suggestions[:3])}?"
 
         return jsonify({
             "error": msg,
