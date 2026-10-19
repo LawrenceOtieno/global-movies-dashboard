@@ -22,7 +22,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 movies_bp = Blueprint("movies", __name__)
 
-# --- OPTIMIZATION: Connection Pooling for Singapore -> EU latency ---
+# --- Connection Pooling ---
 DB_URI = os.getenv('SUPABASE_DB_URI')
 engine = create_engine(
     DB_URI,
@@ -108,7 +108,7 @@ CACHED_CULT_CLASSICS = load_cached('movie', 'cult_classics', {"hidden_gems": [],
 print(f"  Loaded analytics in {time.time() - _t0:.2f}s")
 
 
-# ---------- Fuzzy matcher (OPTIMIZATION: Reduced to 1000 to save RAM) ----------
+# ---------- Fuzzy matcher ----------
 print("Building fuzzy title matcher...")
 _t0 = time.time()
 with engine.connect() as conn:
@@ -145,46 +145,30 @@ FULL_SELECT = """
 
 
 def find_source_movie(title: str):
-    # 1. Exact match
-    q = text(FULL_SELECT + " WHERE LOWER(title) = LOWER(:t) ORDER BY vote_count DESC NULLS LAST LIMIT 1")
+    """Single query that tries exact → starts-with → contains in order."""
+    q = text(FULL_SELECT + """
+        WHERE LOWER(title) = LOWER(:t) OR LOWER(title) LIKE LOWER(:t) || '%' OR LOWER(title) LIKE '%' || LOWER(:t) || '%'
+        ORDER BY 
+            CASE 
+                WHEN LOWER(title) = LOWER(:t) THEN 1
+                WHEN LOWER(title) LIKE LOWER(:t) || '%' THEN 2
+                ELSE 3
+            END,
+            vote_count DESC NULLS LAST
+        LIMIT 1
+    """)
     with engine.connect() as conn:
         row = conn.execute(q, {"t": title}).fetchone()
     if row:
         return dict(row._mapping)
 
-    # 2. Fuzzy match
     fuzzy = find_fuzzy_match(title, threshold=0.60)
     if fuzzy:
-        q_fuzzy = text(FULL_SELECT + " WHERE title = :t ORDER BY vote_count DESC NULLS LAST LIMIT 1")
+        q2 = text(FULL_SELECT + " WHERE title = :t ORDER BY vote_count DESC NULLS LAST LIMIT 1")
         with engine.connect() as conn:
-            row = conn.execute(q_fuzzy, {"t": fuzzy}).fetchone()
+            row = conn.execute(q2, {"t": fuzzy}).fetchone()
         if row:
             return dict(row._mapping)
-
-    # 3. Loose match (Contains)
-    q_loose = text(FULL_SELECT + " WHERE LOWER(title) LIKE '%' || LOWER(:t) || '%' ORDER BY vote_count DESC NULLS LAST LIMIT 1")
-    with engine.connect() as conn:
-        row = conn.execute(q_loose, {"t": title}).fetchone()
-    if row:
-        return dict(row._mapping)
-
-    # 4. TMDB Live Fallback
-    live = fetch_from_tmdb_live(title)
-    if live:
-        return {
-            "id": None,
-            "title": live["title"],
-            "genres": live["genres"],
-            "keywords": live["keywords"],
-            "primary_production_company": "",
-            "original_language": live["original_language"],
-            "production_countries": "",
-            "spoken_languages": "",
-            "original_title": live["original_title"],
-            "vote_count": 0,
-            "release_year": live["year"],
-            "is_live_tmdb": True
-        }
 
     return None
 
@@ -276,7 +260,6 @@ def build_soup_from_row(row) -> str:
 # ---------- Routes ----------
 @movies_bp.route("/api/health", methods=["GET"])
 def health_check():
-    # OPTIMIZATION: No DB hit. Fast, always works.
     return jsonify({
         "status": "healthy",
         "total_movies": 1136706,
@@ -344,32 +327,27 @@ def recommend():
         return jsonify({"error": "Movie vectorizer not loaded"}), 503
 
     source_row = find_source_movie(title)
-    source_id = None
-    source_title = None
 
-    if source_row:
-        source_title = source_row["title"]
-        source_id = source_row["id"]
-        soup = build_soup_from_row(source_row)
-    else:
+    if not source_row:
         suggestions = find_loose_matches(title, limit=5)
         for s in suggest_similar_titles(title, limit=5):
             if s not in suggestions and len(suggestions) < 5:
                 suggestions.append(s)
-        msg = f"No movie found matching '{title}' in the dataset."
-        if suggestions:
-            msg += f" Did you mean: {', '.join(suggestions)}?"
-        return jsonify({"error": msg, "suggestions": suggestions}), 404
 
-    if source_id is None:
-        suggestions = find_loose_matches(title, limit=5)
-        for s in suggest_similar_titles(title, limit=5):
-            if s not in suggestions and len(suggestions) < 5:
-                suggestions.append(s)
+        live = fetch_from_tmdb_live(title)
+        if live:
+            msg = f"'{title}' exists in TMDB but isn't in our top-22k dataset. Try one of the similar movies below."
+        else:
+            msg = f"No movie found matching '{title}'."
+
         return jsonify({
-            "error": f"'{title}' is not in our local dataset, so we can't run recommendations on it.",
-            "suggestions": suggestions if suggestions else ["Try searching for a movie that is in the dataset."]
+            "error": msg,
+            "suggestions": suggestions if suggestions else ["Try 'Inception', 'Toy Story', or 'The Dark Knight'."]
         }), 404
+
+    source_title = source_row["title"]
+    source_id = source_row["id"]
+    soup = build_soup_from_row(source_row)
 
     query_vec = _movie_vectorizer.transform([soup]).toarray().flatten().tolist()
 
@@ -385,7 +363,7 @@ def recommend():
 
     matches = []
     for m in res:
-        if source_id is not None and str(m.id) == str(source_id):
+        if str(m.id) == str(source_id):
             continue
         if m.score is None or m.score < MIN_SIMILARITY:
             continue
@@ -398,7 +376,7 @@ def recommend():
             "source_title": source_title,
             "source": "upstash",
             "recommendations": [],
-            "accuracy_note": "No close match found.",
+            "accuracy_note": "No close match found."
         })
 
     ids = [int(m.id) for m in matches]

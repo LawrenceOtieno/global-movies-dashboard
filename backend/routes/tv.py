@@ -21,7 +21,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 tv_bp = Blueprint("tv", __name__, url_prefix="/api/tv")
 
-# --- OPTIMIZATION: Connection Pooling ---
+# --- Connection Pooling ---
 DB_URI = os.getenv('SUPABASE_DB_URI')
 engine = create_engine(
     DB_URI,
@@ -99,7 +99,7 @@ CACHED_CULT_CLASSICS = load_cached('tv', 'cult_classics', {"hidden_gems": [], "o
 print(f"  Loaded TV analytics in {time.time() - _t0:.2f}s")
 
 
-# ---------- Fuzzy matcher (OPTIMIZATION: Reduced to 1000) ----------
+# ---------- Fuzzy matcher ----------
 print("Building TV fuzzy title matcher...")
 _t0 = time.time()
 with engine.connect() as conn:
@@ -117,60 +117,47 @@ print(f"  TV fuzzy matcher ready: {len(FUZZY_NAMES):,} names in {time.time() - _
 
 
 def find_fuzzy_match(title: str, threshold: float = 0.60):
-    if fuzzy_vectorizer is None or not FUZZY_NAMES: return None
+    if fuzzy_vectorizer is None or not FUZZY_NAMES:
+        return None
     q = fuzzy_vectorizer.transform([title])
     sims = cosine_similarity(q, fuzzy_matrix)[0]
     best = sims.argmax()
-    if sims[best] >= threshold: return FUZZY_NAMES[best]
+    if sims[best] >= threshold:
+        return FUZZY_NAMES[best]
     return None
 
 
 # ---------- Source show lookup ----------
 def find_source_show(title: str):
-    # 1. Exact match
+    """Single query that tries exact → starts-with → contains in order."""
     q = text("""
-        SELECT id, name, genres, created_by, primary_network, primary_production_company, original_language, vote_count, first_air_year 
-        FROM tv_shows WHERE LOWER(name) = LOWER(:t) ORDER BY vote_count DESC NULLS LAST LIMIT 1
+        SELECT id, name, genres, created_by, primary_network, primary_production_company, original_language, vote_count, first_air_year
+        FROM tv_shows
+        WHERE LOWER(name) = LOWER(:t) OR LOWER(name) LIKE LOWER(:t) || '%' OR LOWER(name) LIKE '%' || LOWER(:t) || '%'
+        ORDER BY 
+            CASE 
+                WHEN LOWER(name) = LOWER(:t) THEN 1
+                WHEN LOWER(name) LIKE LOWER(:t) || '%' THEN 2
+                ELSE 3
+            END,
+            vote_count DESC NULLS LAST
+        LIMIT 1
     """)
     with engine.connect() as conn:
         row = conn.execute(q, {"t": title}).fetchone()
-    if row: return dict(row._mapping)
+    if row:
+        return dict(row._mapping)
 
-    # 2. Fuzzy match
     fuzzy = find_fuzzy_match(title, threshold=0.60)
     if fuzzy:
-        q_fuzzy = text("""
-            SELECT id, name, genres, created_by, primary_network, primary_production_company, original_language, vote_count, first_air_year 
+        q2 = text("""
+            SELECT id, name, genres, created_by, primary_network, primary_production_company, original_language, vote_count, first_air_year
             FROM tv_shows WHERE name = :t ORDER BY vote_count DESC NULLS LAST LIMIT 1
         """)
         with engine.connect() as conn:
-            row = conn.execute(q_fuzzy, {"t": fuzzy}).fetchone()
-        if row: return dict(row._mapping)
-
-    # 3. Loose match
-    q_loose = text("""
-        SELECT id, name, genres, created_by, primary_network, primary_production_company, original_language, vote_count, first_air_year 
-        FROM tv_shows WHERE LOWER(name) LIKE '%' || LOWER(:t) || '%' ORDER BY vote_count DESC NULLS LAST LIMIT 1
-    """)
-    with engine.connect() as conn:
-        row = conn.execute(q_loose, {"t": title}).fetchone()
-    if row: return dict(row._mapping)
-
-    # 4. TMDB Live Fallback
-    live = fetch_from_tmdb_tv_live(title)
-    if live:
-        return {
-            "id": None,
-            "name": live["name"],
-            "genres": live["genres"],
-            "created_by": "",
-            "primary_network": "",
-            "primary_production_company": "",
-            "original_language": "",
-            "vote_count": 0,
-            "first_air_year": live["year"],
-            "is_live_tmdb": True
-        }
+            row = conn.execute(q2, {"t": fuzzy}).fetchone()
+        if row:
+            return dict(row._mapping)
 
     return None
 
@@ -235,7 +222,6 @@ def fetch_from_tmdb_tv_live(title: str):
 # ---------- Routes ----------
 @tv_bp.route("/health", methods=["GET"])
 def health_check():
-    # OPTIMIZATION: No DB hit. Fast, always works.
     return jsonify({
         "status": "healthy",
         "total_shows": 250000,
@@ -304,31 +290,26 @@ def recommend():
         return jsonify({"error": "Pass a ?title= query param"}), 400
 
     source_row = find_source_show(title)
-    source_id = None
-    source_title = None
 
-    if source_row:
-        source_title = source_row["name"]
-        source_id = source_row["id"]
-    else:
+    if not source_row:
         suggestions = find_loose_matches(title, limit=5)
         for s in suggest_similar_titles(title, limit=5):
             if s not in suggestions and len(suggestions) < 5:
                 suggestions.append(s)
-        msg = f"No show found matching '{title}' in the dataset."
-        if suggestions:
-            msg += f" Did you mean: {', '.join(suggestions)}?"
-        return jsonify({"error": msg, "suggestions": suggestions}), 404
 
-    if source_id is None:
-        suggestions = find_loose_matches(title, limit=5)
-        for s in suggest_similar_titles(title, limit=5):
-            if s not in suggestions and len(suggestions) < 5:
-                suggestions.append(s)
+        live = fetch_from_tmdb_tv_live(title)
+        if live:
+            msg = f"'{title}' exists in TMDB but isn't in our top-22k dataset. Try one of the similar shows below."
+        else:
+            msg = f"No show found matching '{title}'."
+
         return jsonify({
-            "error": f"'{title}' is not in our local dataset, so we can't run recommendations on it.",
-            "suggestions": suggestions if suggestions else ["Try searching for a TV show that is in the dataset."]
+            "error": msg,
+            "suggestions": suggestions if suggestions else ["Try 'Breaking Bad', 'Game of Thrones', or 'The Office'."]
         }), 404
+
+    source_title = source_row["name"]
+    source_id = source_row["id"]
 
     try:
         res = tv_index.query(
@@ -348,7 +329,7 @@ def recommend():
             "source_title": source_title,
             "source": "pinecone",
             "recommendations": [],
-            "accuracy_note": "No close match found.",
+            "accuracy_note": "No close match found."
         })
 
     ids = [int(m["id"]) for m in matches]
