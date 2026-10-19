@@ -110,9 +110,10 @@ print(f"  Loaded analytics in {time.time() - _t0:.2f}s")
 print("Loading titles for in-memory matcher...")
 _t0 = time.time()
 with engine.connect() as conn:
-    # Increased to 5000 to ensure famous movies like Inception are captured
+    # Load all movies with at least 5 votes — excludes placeholder rows
+    # but guarantees "Inception", "Breaking Bad", etc. are included.
     rows = conn.execute(text(
-        "SELECT DISTINCT title, vote_count FROM movies WHERE title IS NOT NULL ORDER BY vote_count DESC NULLS LAST LIMIT 5000"
+        "SELECT DISTINCT title FROM movies WHERE title IS NOT NULL AND vote_count >= 5"
     )).fetchall()
 FUZZY_TITLES = [r[0] for r in rows if r[0]]
 print(f"  In-memory matcher ready: {len(FUZZY_TITLES):,} titles in {time.time() - _t0:.1f}s")
@@ -314,12 +315,10 @@ def recommend():
     if not source_row:
         suggestions = []
 
-        # 1. Our in-memory matcher (now covers top 5000 titles)
         fuzzy_title = find_fuzzy_match(title, threshold=0.75)
         if fuzzy_title:
             suggestions.append(fuzzy_title)
 
-        # 2. Loose matches
         for s in suggest_similar_titles(title, limit=4):
             if s not in suggestions:
                 suggestions.append(s)

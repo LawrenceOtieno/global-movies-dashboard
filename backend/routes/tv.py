@@ -101,9 +101,10 @@ print(f"  Loaded TV analytics in {time.time() - _t0:.2f}s")
 print("Loading TV titles for in-memory matcher...")
 _t0 = time.time()
 with engine.connect() as conn:
-    # Increased to 5000 to ensure popular shows are captured
+    # Load all shows with at least 5 votes — excludes placeholder rows
+    # but guarantees popular shows are included.
     rows = conn.execute(text(
-        "SELECT DISTINCT name, vote_count FROM tv_shows WHERE name IS NOT NULL ORDER BY vote_count DESC NULLS LAST LIMIT 5000"
+        "SELECT DISTINCT name FROM tv_shows WHERE name IS NOT NULL AND vote_count >= 5"
     )).fetchall()
 FUZZY_NAMES = [r[0] for r in rows if r[0]]
 print(f"  TV in-memory matcher ready: {len(FUZZY_NAMES):,} names in {time.time() - _t0:.1f}s")
@@ -277,12 +278,10 @@ def recommend():
     if not source_row:
         suggestions = []
 
-        # 1. In-memory matcher
         fuzzy_title = find_fuzzy_match(title, threshold=0.75)
         if fuzzy_title:
             suggestions.append(fuzzy_title)
 
-        # 2. Loose matches
         for s in suggest_similar_titles(title, limit=4):
             if s not in suggestions:
                 suggestions.append(s)
