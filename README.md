@@ -44,7 +44,7 @@ CineMetrics exposes comprehensive industry aggregations across thousands of reco
 
 ---
 
-### 📺 Television Network Insights
+### 📺 TV Show Insights
 
 | **TV Shows Genre Volume** | **Network Standings** | **Top TV Shows Production Houses** |
 |:---:|:---:|:---:|
@@ -109,7 +109,7 @@ The app architecture relies on secure, bidirectional environment cross-wiring be
 To safely accept requests from your user interface, the live Render app needs access to your frontend domain to satisfy CORS requirements.
 Configure the following variable in your **Render Environment Dashboard**:
 ```env
-ALLOWED_ORIGINS=https://vercel.app
+ALLOWED_ORIGINS=...
 ```
 
 ### 2. Frontend Deployed on Vercel
