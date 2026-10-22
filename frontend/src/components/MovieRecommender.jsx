@@ -52,19 +52,20 @@ export default function MovieRecommender() {
         <p className="text-sm text-gray-500 mt-1">Type a movie title to get similar, well-rated recommendations.</p>
       </div>
 
-      <div className="max-w-xl mx-auto flex gap-3">
+      {/* FIX: flex-col on mobile, flex-row on tablet+ */}
+      <div className="max-w-xl mx-auto flex flex-col sm:flex-row gap-3">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') runRecommend(); }}
           placeholder="e.g. Inception"
-          className="flex-1 bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-[#15616D] focus:outline-none"
+          className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-[#15616D] focus:outline-none"
         />
         <button
           onClick={() => runRecommend()}
           disabled={loading || !query.trim()}
-          className="bg-[#15616D] hover:bg-teal-800 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-md shrink-0"
+          className="w-full sm:w-auto bg-[#15616D] hover:bg-teal-800 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-md shrink-0"
         >
           {loading ? 'Searching…' : 'Recommend'}
         </button>
@@ -114,8 +115,6 @@ export default function MovieRecommender() {
                 key={`${r.title}-${r.year || idx}`}
                 className="bg-[#E7ECEF]/60 border border-gray-200/60 rounded-xl p-4 flex items-center gap-3"
               >
-                {/* Left column: takes remaining width, allows shrinking,
-                    truncates only the title text — year stays visible. */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-1.5 min-w-0">
                     <button
@@ -134,8 +133,6 @@ export default function MovieRecommender() {
                   </p>
                 </div>
 
-                {/* Right column: fixed-width rating badge, never shrinks,
-                    never gets overlapped. */}
                 <span className="text-sm font-bold text-[#15616D] shrink-0 flex items-center gap-1">
                   <svg className="w-3.5 h-3.5 text-[#FF9F43]" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 .587l3.668 7.431 8.212 1.192-5.94 5.787 1.402 8.168-7.342-3.861-7.342 3.861 1.402-8.168-5.94-5.787 8.212-1.192z"/>
