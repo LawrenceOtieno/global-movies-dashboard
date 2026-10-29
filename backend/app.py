@@ -19,17 +19,19 @@ import os
 from flask import Flask, jsonify, request
 from flask_compress import Compress
 from flask_cors import CORS
-from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from extensions import limiter
+from extensions import limiter, get_client_ip
 from routes.movies import movies_bp
 from routes.tv import tv_bp
 
 app = Flask(__name__)
 
-# Trust Render's proxy so rate limiting sees the real user IP
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+# Trust Cloudflare + Render's proxy layers. x_for=3 accounts for the
+# full chain: real client → Cloudflare → Render internal proxy → app.
+# (The limiter itself uses CF-Connecting-IP directly, but ProxyFix is
+# still needed so Flask's request.remote_addr reflects the real IP.)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=3, x_proto=1, x_host=1)
 
 # --- CORS allowlist ---
 ALLOWED_ORIGINS = [
@@ -64,9 +66,9 @@ def ratelimit_status():
         "env_var_length": len(raw),
         "configured_storage": app.config.get("RATELIMIT_STORAGE_URI", "")[:10],
         "limiter_storage_type": type(limiter._storage).__name__ if hasattr(limiter, "_storage") and limiter._storage else "None",
-        # --- IP diagnostics (added) ---
+        # --- IP diagnostics ---
         "remote_addr": request.remote_addr,
-        "limiter_sees_ip": get_remote_address(),
+        "limiter_sees_ip": get_client_ip(),
         "x_forwarded_for": request.headers.get("X-Forwarded-For", "NOT SET"),
         "cf_connecting_ip": request.headers.get("CF-Connecting-IP", "NOT SET"),
     })
