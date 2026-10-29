@@ -66,6 +66,35 @@ export default function Dashboard() {
   const [companyBarPositions, setCompanyBarPositions] = useState([10, 30, 50, 70, 90]);
   const [activeCompanyTooltip, setActiveCompanyTooltip] = useState(null);
 
+  // --- Swipe Navigation Logic ---
+  const touchStartX = useRef(null);
+  const touchEndX = useRef(null);
+
+  const handlePointerDown = (e) => {
+    if (e.isPrimary) {
+      touchStartX.current = e.clientX;
+    }
+  };
+
+  const handlePointerUp = (e) => {
+    if (!e.isPrimary || touchStartX.current === null) return;
+    
+    touchEndX.current = e.clientX;
+    const distance = touchStartX.current - touchEndX.current;
+
+    // 50px swipe threshold
+    if (distance > 50) {
+      // Swiped Left -> Go to Full Analytics
+      if (currentPage === 'overview') setCurrentPage('analytics');
+    } else if (distance < -50) {
+      // Swiped Right -> Go to Overview
+      if (currentPage === 'analytics') setCurrentPage('overview');
+    }
+    
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
+
   useEffect(() => {
     Promise.all([
       fetch(`${API_BASE_URL}/api/summary-stats`).then((r) => { if (!r.ok) throw new Error(`summary-stats failed (HTTP ${r.status})`); return r.json(); }),
@@ -182,12 +211,21 @@ export default function Dashboard() {
           <button onClick={() => setCurrentPage('overview')} className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${currentPage === 'overview' ? 'border-[#FF7D00] text-[#15616D]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>Overview</button>
           <button onClick={() => setCurrentPage('analytics')} className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${currentPage === 'analytics' ? 'border-[#FF7D00] text-[#15616D]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>Full Analytics</button>
         </div>
+        {/* Swipe Hint for Mobile */}
+        <div className="text-center pb-2 text-[10px] text-gray-400 font-medium sm:hidden">
+          Swipe left or right to change views
+        </div>
       </div>
 
       {loadError && (<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6"><div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-4">Couldn't reach the backend at <code className="font-mono">{API_BASE_URL}</code> — {loadError}</div></div>)}
       {!data && !loadError && (<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6"><div className="bg-white border border-gray-200 text-gray-500 text-sm rounded-xl p-4">Loading your dataset…</div></div>)}
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main 
+        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8"
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        style={{ touchAction: 'pan-y' }}
+      >
       {currentPage === 'overview' && (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full items-start">
