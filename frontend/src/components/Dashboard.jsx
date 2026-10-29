@@ -53,6 +53,10 @@ function formatCurrency(dollars) {
   return `$${dollars.toFixed(0)}`;
 }
 
+// --- Approach 1: Memoize the expensive scatter components ---
+const MovieScatter = React.memo(() => <CultClassicsChart limit={15} />);
+const TvScatter = React.memo(() => <TvCultClassicsChart limit={15} />);
+
 export default function Dashboard() {
   const [currentPage, setCurrentPage] = useState('overview');
   const [data, setData] = useState(null);
@@ -84,10 +88,8 @@ export default function Dashboard() {
 
     // 50px swipe threshold
     if (distance > 50) {
-      // Swiped Left -> Go to Full Analytics
       if (currentPage === 'overview') setCurrentPage('analytics');
     } else if (distance < -50) {
-      // Swiped Right -> Go to Overview
       if (currentPage === 'analytics') setCurrentPage('overview');
     }
     
@@ -226,178 +228,178 @@ export default function Dashboard() {
         onPointerUp={handlePointerUp}
         style={{ touchAction: 'pan-y' }}
       >
-      {currentPage === 'overview' && (
-        <>
+        {/* --- Approach 2: Both pages mounted, CSS controls visibility --- */}
+        
+        {/* OVERVIEW PAGE */}
+        <div className={currentPage === 'overview' ? 'block' : 'hidden'}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full items-start">
-            <div className="bg-white p-6 rounded-2xl shadow-md w-full min-w-0"><CultClassicsChart limit={15} /></div>
-            <div className="bg-white p-6 rounded-2xl shadow-md w-full min-w-0"><TvCultClassicsChart limit={15} /></div>
+            <div className="bg-white p-6 rounded-2xl shadow-md w-full min-w-0"><MovieScatter /></div>
+            <div className="bg-white p-6 rounded-2xl shadow-md w-full min-w-0"><TvScatter /></div>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full items-start">
             <MovieRecommender />
             <TvRecommender />
           </div>
-        </>
-      )}
-
-      {currentPage === 'analytics' && (
-        <>
-        <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-extrabold text-[#073B4C] whitespace-nowrap flex items-center gap-2 shrink-0">
-            {resolveSectionIcon('movies.png') ? (<span className="w-10 h-10 overflow-hidden shrink-0 flex items-center justify-center"><img src={resolveSectionIcon('movies.png')} alt="" className="h-full w-auto max-w-none" style={{ transform: 'scale(1.7)' }} /></span>) : (<span>🎬</span>)}
-            Movies
-          </h2>
-          <div className="h-px bg-gray-200 flex-1" />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-[#15616D] flex flex-col min-w-0">
-            <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wider text-gray-500 min-w-0">Total Movies Analyzed</p><div className="bg-[#15616D]/10 p-2 rounded-lg text-[#15616D] shrink-0"><svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg></div></div>
-            <h3 className="text-2xl font-extrabold text-[#15616D] mt-3 truncate">{data ? data.totalMovies.toLocaleString() : '—'}</h3>
-            <p className="text-xs text-emerald-600 font-semibold mt-1">{data ? `${data.highlyRatedCount.toLocaleString()} rated 7.0+` : '—'}</p>
+        {/* ANALYTICS PAGE */}
+        <div className={currentPage === 'analytics' ? 'block' : 'hidden'}>
+          <div className="flex items-center gap-4">
+            <h2 className="text-2xl font-extrabold text-[#073B4C] whitespace-nowrap flex items-center gap-2 shrink-0">
+              {resolveSectionIcon('movies.png') ? (<span className="w-10 h-10 overflow-hidden shrink-0 flex items-center justify-center"><img src={resolveSectionIcon('movies.png')} alt="" className="h-full w-auto max-w-none" style={{ transform: 'scale(1.7)' }} /></span>) : (<span>🎬</span>)}
+              Movies
+            </h2>
+            <div className="h-px bg-gray-200 flex-1" />
           </div>
-          <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-[#8AA79F] flex flex-col min-w-0">
-            <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wider text-gray-500 min-w-0">Average Rating</p><div className="bg-[#8AA79F]/20 p-2 rounded-lg text-[#15616D] shrink-0"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 .587l3.668 7.431 8.212 1.192-5.94 5.787 1.402 8.168-7.342-3.861-7.342 3.861 1.402-8.168-5.94-5.787 8.212-1.192z"/></svg></div></div>
-            <h3 className="text-2xl font-extrabold text-[#15616D] mt-3 truncate">{data ? data.avgRating.toFixed(2) : '—'} <span className="text-sm font-normal text-gray-500">/ 10</span></h3>
-            <p className="text-xs text-gray-500 font-medium mt-1">Across all titles</p>
-          </div>
-          <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-[#FF7D00] flex flex-col min-w-0">
-            <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wider text-gray-500 min-w-0">Total Box Office Revenue</p><div className="bg-[#FF7D00]/10 p-2 rounded-lg text-[#FF7D00] shrink-0"><svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div></div>
-            <h3 className="text-2xl font-extrabold text-[#15616D] mt-3 truncate">{data ? formatCurrency(data.totalRevenue) : '—'}</h3>
-            <p className="text-xs text-emerald-600 font-semibold mt-1">Worldwide gross</p>
-          </div>
-          <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-[#073B4C] flex flex-col min-w-0">
-            <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wider text-gray-500 min-w-0">Average Runtime</p><div className="bg-[#073B4C]/10 p-2 rounded-lg text-[#073B4C] shrink-0"><svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div></div>
-            <h3 className="text-2xl font-extrabold text-[#15616D] mt-3 truncate">{data ? data.avgRuntime.toFixed(1) : '—'} <span className="text-sm font-normal text-gray-500">mins</span></h3>
-            <p className="text-xs text-gray-500 font-medium mt-1">Avg. feature length</p>
-          </div>
-          <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-[#FF9F43] flex flex-col min-w-0">
-            <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wider text-gray-500 min-w-0">Highest Grossing Genre</p><div className="bg-[#FF9F43]/10 p-2 rounded-lg text-[#FF9F43] shrink-0"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div></div>
-            <h3 className="text-2xl font-extrabold text-[#15616D] mt-3 truncate">{data ? data.topGenreByRevenue[0] : '—'}</h3>
-            <p className="text-xs text-emerald-600 font-semibold mt-1">{data ? `${formatCurrency(data.topGenreByRevenue[1])} revenue` : '—'}</p>
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full">
-          <div id="movie-genre-container" className="relative bg-white p-6 pb-12 rounded-2xl shadow-md w-full min-w-0 flex flex-col justify-between">
-            <ChartDownloader containerId="movie-genre-container" filename="movie-genres.png" />
-            <div className="flex items-center justify-between mb-4">
-              <div className="min-w-0 pr-2">
-                <h2 className="text-lg font-bold text-[#15616D] truncate">Top Movie Genres Distribution</h2>
-                <p className="text-xs text-gray-500 truncate">Movie count distribution across primary cinematic genres</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-[#15616D] flex flex-col min-w-0">
+              <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wider text-gray-500 min-w-0">Total Movies Analyzed</p><div className="bg-[#15616D]/10 p-2 rounded-lg text-[#15616D] shrink-0"><svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg></div></div>
+              <h3 className="text-2xl font-extrabold text-[#15616D] mt-3 truncate">{data ? data.totalMovies.toLocaleString() : '—'}</h3>
+              <p className="text-xs text-emerald-600 font-semibold mt-1">{data ? `${data.highlyRatedCount.toLocaleString()} rated 7.0+` : '—'}</p>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-[#8AA79F] flex flex-col min-w-0">
+              <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wider text-gray-500 min-w-0">Average Rating</p><div className="bg-[#8AA79F]/20 p-2 rounded-lg text-[#15616D] shrink-0"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 .587l3.668 7.431 8.212 1.192-5.94 5.787 1.402 8.168-7.342-3.861-7.342 3.861 1.402-8.168-5.94-5.787 8.212-1.192z"/></svg></div></div>
+              <h3 className="text-2xl font-extrabold text-[#15616D] mt-3 truncate">{data ? data.avgRating.toFixed(2) : '—'} <span className="text-sm font-normal text-gray-500">/ 10</span></h3>
+              <p className="text-xs text-gray-500 font-medium mt-1">Across all titles</p>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-[#FF7D00] flex flex-col min-w-0">
+              <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wider text-gray-500 min-w-0">Total Box Office Revenue</p><div className="bg-[#FF7D00]/10 p-2 rounded-lg text-[#FF7D00] shrink-0"><svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div></div>
+              <h3 className="text-2xl font-extrabold text-[#15616D] mt-3 truncate">{data ? formatCurrency(data.totalRevenue) : '—'}</h3>
+              <p className="text-xs text-emerald-600 font-semibold mt-1">Worldwide gross</p>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-[#073B4C] flex flex-col min-w-0">
+              <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wider text-gray-500 min-w-0">Average Runtime</p><div className="bg-[#073B4C]/10 p-2 rounded-lg text-[#073B4C] shrink-0"><svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div></div>
+              <h3 className="text-2xl font-extrabold text-[#15616D] mt-3 truncate">{data ? data.avgRuntime.toFixed(1) : '—'} <span className="text-sm font-normal text-gray-500">mins</span></h3>
+              <p className="text-xs text-gray-500 font-medium mt-1">Avg. feature length</p>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-[#FF9F43] flex flex-col min-w-0">
+              <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wider text-gray-500 min-w-0">Highest Grossing Genre</p><div className="bg-[#FF9F43]/10 p-2 rounded-lg text-[#FF9F43] shrink-0"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div></div>
+              <h3 className="text-2xl font-extrabold text-[#15616D] mt-3 truncate">{data ? data.topGenreByRevenue[0] : '—'}</h3>
+              <p className="text-xs text-emerald-600 font-semibold mt-1">{data ? `${formatCurrency(data.topGenreByRevenue[1])} revenue` : '—'}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full">
+            <div id="movie-genre-container" className="relative bg-white p-6 pb-12 rounded-2xl shadow-md w-full min-w-0 flex flex-col justify-between">
+              <ChartDownloader containerId="movie-genre-container" filename="movie-genres.png" />
+              <div className="flex items-center justify-between mb-4">
+                <div className="min-w-0 pr-2">
+                  <h2 className="text-lg font-bold text-[#15616D] truncate">Top Movie Genres Distribution</h2>
+                  <p className="text-xs text-gray-500 truncate">Movie count distribution across primary cinematic genres</p>
+                </div>
+                <span className="bg-[#E7ECEF] text-[#15616D] text-xs font-semibold px-3 py-1 rounded-lg shrink-0">Top 8 Genres</span>
               </div>
-              <span className="bg-[#E7ECEF] text-[#15616D] text-xs font-semibold px-3 py-1 rounded-lg shrink-0">Top 8 Genres</span>
-            </div>
-            <div className="relative h-72 w-full flex items-center justify-center">
-              <canvas ref={genreCanvasRef} id="genreChart"></canvas>
-            </div>
-            {data && data.uncategorizedPct > 0 && (<p className="text-[11px] text-gray-400 text-center mt-3">{data.uncategorizedPct}% of movies have no genre listed in the source data and aren't shown above.</p>)}
-          </div>
-
-          <div id="movie-country-container" className="relative bg-white p-6 pb-12 rounded-2xl shadow-md w-full min-w-0 flex flex-col justify-between">
-            <ChartDownloader containerId="movie-country-container" filename="movie-countries.png" />
-            <div className="flex items-center justify-between mb-4">
-              <div className="min-w-0 pr-2">
-                <h2 className="text-lg font-bold text-[#15616D] truncate">Top Production Countries & Ratings</h2>
-                <p className="text-xs text-gray-500 truncate">Catalog size vs. average rating per country</p>
+              <div className="relative h-72 w-full flex items-center justify-center">
+                <canvas ref={genreCanvasRef} id="genreChart"></canvas>
               </div>
-              <span className="bg-[#E7ECEF] text-[#15616D] text-xs font-semibold px-3 py-1 rounded-lg shrink-0">By Country</span>
+              {data && data.uncategorizedPct > 0 && (<p className="text-[11px] text-gray-400 text-center mt-3">{data.uncategorizedPct}% of movies have no genre listed in the source data and aren't shown above.</p>)}
             </div>
-            <div className="relative h-72 w-full flex items-center justify-center">
-              <canvas ref={countryCanvasRef} id="countryChart"></canvas>
+
+            <div id="movie-country-container" className="relative bg-white p-6 pb-12 rounded-2xl shadow-md w-full min-w-0 flex flex-col justify-between">
+              <ChartDownloader containerId="movie-country-container" filename="movie-countries.png" />
+              <div className="flex items-center justify-between mb-4">
+                <div className="min-w-0 pr-2">
+                  <h2 className="text-lg font-bold text-[#15616D] truncate">Top Production Countries & Ratings</h2>
+                  <p className="text-xs text-gray-500 truncate">Catalog size vs. average rating per country</p>
+                </div>
+                <span className="bg-[#E7ECEF] text-[#15616D] text-xs font-semibold px-3 py-1 rounded-lg shrink-0">By Country</span>
+              </div>
+              <div className="relative h-72 w-full flex items-center justify-center">
+                <canvas ref={countryCanvasRef} id="countryChart"></canvas>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full">
-          <div className="bg-white p-6 rounded-2xl shadow-md w-full min-w-0">
-            <div className="flex items-center justify-between mb-4">
-              <div className="min-w-0 pr-2"><h2 className="text-lg font-bold text-[#15616D] truncate">Top 10 Movies — Best Performers</h2><p className="text-xs text-gray-500 truncate">Ranked by weighted rating (accounts for vote count)</p></div>
-              <span className="bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1 rounded-lg shrink-0">Top 10</span>
-            </div>
-            <ul className="space-y-2.5">
-              {(data?.topMovies ?? []).map((m, idx) => (
-                <li key={`${m.title}-${m.year}-${idx}`} className="flex items-center gap-3">
-                  <span className="w-6 h-6 rounded-full bg-[#15616D] text-white text-xs font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-2"><p className="text-sm font-semibold text-[#073B4C] truncate">{m.title} <span className="text-xs font-normal text-gray-400">({m.year ?? '—'})</span></p><span className="text-xs font-bold text-[#15616D] shrink-0">{formatCurrency(m.revenue)}</span></div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className="flex-1 bg-[#E7ECEF] rounded-full h-1.5 overflow-hidden"><div className="bg-gradient-to-r from-[#15616D] to-emerald-400 h-full rounded-full" style={{ width: `${(m.weighted_rating / 10) * 100}%` }}></div></div>
-                      <span className="text-[11px] text-gray-500 shrink-0 flex items-center gap-0.5"><svg className="w-3 h-3 text-[#FF9F43]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 .587l3.668 7.431 8.212 1.192-5.94 5.787 1.402 8.168-7.342-3.861-7.342 3.861 1.402-8.168-5.94-5.787 8.212-1.192z"/></svg>{m.weighted_rating.toFixed(1)}</span>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full">
+            <div className="bg-white p-6 rounded-2xl shadow-md w-full min-w-0">
+              <div className="flex items-center justify-between mb-4">
+                <div className="min-w-0 pr-2"><h2 className="text-lg font-bold text-[#15616D] truncate">Top 10 Movies — Best Performers</h2><p className="text-xs text-gray-500 truncate">Ranked by weighted rating (accounts for vote count)</p></div>
+                <span className="bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1 rounded-lg shrink-0">Top 10</span>
+              </div>
+              <ul className="space-y-2.5">
+                {(data?.topMovies ?? []).map((m, idx) => (
+                  <li key={`${m.title}-${m.year}-${idx}`} className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-[#15616D] text-white text-xs font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2"><p className="text-sm font-semibold text-[#073B4C] truncate">{m.title} <span className="text-xs font-normal text-gray-400">({m.year ?? '—'})</span></p><span className="text-xs font-bold text-[#15616D] shrink-0">{formatCurrency(m.revenue)}</span></div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1 bg-[#E7ECEF] rounded-full h-1.5 overflow-hidden"><div className="bg-gradient-to-r from-[#15616D] to-emerald-400 h-full rounded-full" style={{ width: `${(m.weighted_rating / 10) * 100}%` }}></div></div>
+                        <span className="text-[11px] text-gray-500 shrink-0 flex items-center gap-0.5"><svg className="w-3 h-3 text-[#FF9F43]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 .587l3.668 7.431 8.212 1.192-5.94 5.787 1.402 8.168-7.342-3.861-7.342 3.861 1.402-8.168-5.94-5.787 8.212-1.192z"/></svg>{m.weighted_rating.toFixed(1)}</span>
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="bg-white p-6 rounded-2xl shadow-md w-full min-w-0">
-            <div className="flex items-center justify-between mb-4">
-              <div className="min-w-0 pr-2"><h2 className="text-lg font-bold text-[#15616D] truncate">Bottom 10 Movies — Worst Performers</h2><p className="text-xs text-gray-500 truncate">Ranked by weighted rating (accounts for vote count)</p></div>
-              <span className="bg-red-50 text-red-600 text-xs font-semibold px-3 py-1 rounded-lg shrink-0">Bottom 10</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="space-y-2.5">
-              {(data?.bottomMovies ?? []).map((m, idx) => (
-                <li key={`${m.title}-${m.year}-${idx}`} className="flex items-center gap-3">
-                  <span className="w-6 h-6 rounded-full bg-gray-400 text-white text-xs font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-2"><p className="text-sm font-semibold text-[#073B4C] truncate">{m.title} <span className="text-xs font-normal text-gray-400">({m.year ?? '—'})</span></p><span className="text-xs font-bold text-gray-500 shrink-0">{formatCurrency(m.revenue)}</span></div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className="flex-1 bg-[#E7ECEF] rounded-full h-1.5 overflow-hidden"><div className="bg-gradient-to-r from-red-400 to-[#FF7D00] h-full rounded-full" style={{ width: `${(m.weighted_rating / 10) * 100}%` }}></div></div>
-                      <span className="text-[11px] text-gray-500 shrink-0 flex items-center gap-0.5"><svg className="w-3 h-3 text-[#FF9F43]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 .587l3.668 7.431 8.212 1.192-5.94 5.787 1.402 8.168-7.342-3.861-7.342 3.861 1.402-8.168-5.94-5.787 8.212-1.192z"/></svg>{m.weighted_rating.toFixed(1)}</span>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-8 w-full">
-          <div id="movie-company-container" className="relative bg-white p-6 pb-12 rounded-2xl shadow-md w-full min-w-0 flex flex-col justify-between">
-            <ChartDownloader containerId="movie-company-container" filename="movie-companies.png" />
-            <div className="flex items-center justify-between mb-2">
-              <div className="min-w-0 pr-2">
-                <h2 className="text-lg font-bold text-[#15616D] truncate">Top Production Companies by Total Revenue</h2>
-                {data?.totalProductionCompanies > 0 && (<p className="text-xs text-gray-400 mt-0.5">Top 5 of {data.totalProductionCompanies.toLocaleString()} production companies in the dataset</p>)}
+            <div className="bg-white p-6 rounded-2xl shadow-md w-full min-w-0">
+              <div className="flex items-center justify-between mb-4">
+                <div className="min-w-0 pr-2"><h2 className="text-lg font-bold text-[#15616D] truncate">Bottom 10 Movies — Worst Performers</h2><p className="text-xs text-gray-500 truncate">Ranked by weighted rating (accounts for vote count)</p></div>
+                <span className="bg-red-50 text-red-600 text-xs font-semibold px-3 py-1 rounded-lg shrink-0">Bottom 10</span>
               </div>
-              <span className="bg-[#E7ECEF] text-[#15616D] text-xs font-semibold px-3 py-1 rounded-lg shrink-0">Revenue Leaders</span>
+              <ul className="space-y-2.5">
+                {(data?.bottomMovies ?? []).map((m, idx) => (
+                  <li key={`${m.title}-${m.year}-${idx}`} className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-gray-400 text-white text-xs font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2"><p className="text-sm font-semibold text-[#073B4C] truncate">{m.title} <span className="text-xs font-normal text-gray-400">({m.year ?? '—'})</span></p><span className="text-xs font-bold text-gray-500 shrink-0">{formatCurrency(m.revenue)}</span></div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1 bg-[#E7ECEF] rounded-full h-1.5 overflow-hidden"><div className="bg-gradient-to-r from-red-400 to-[#FF7D00] h-full rounded-full" style={{ width: `${(m.weighted_rating / 10) * 100}%` }}></div></div>
+                        <span className="text-[11px] text-gray-500 shrink-0 flex items-center gap-0.5"><svg className="w-3 h-3 text-[#FF9F43]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 .587l3.668 7.431 8.212 1.192-5.94 5.787 1.402 8.168-7.342-3.861-7.342 3.861 1.402-8.168-5.94-5.787 8.212-1.192z"/></svg>{m.weighted_rating.toFixed(1)}</span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <div className="relative h-60 w-full flex items-center justify-center">
-              <canvas ref={companyCanvasRef} id="companyChart"></canvas>
-            </div>
-            <div className="relative mt-4 pt-4 border-t border-gray-100 w-full" style={{ height: '100px' }}>
-              {(data?.companyStats ?? []).map((c, idx) => {
-                const bio = COMPANY_BIOS[c.production_company];
-                return (
-                  <div key={c.production_company} className="absolute flex flex-col items-center justify-start cursor-pointer text-center group" style={{ left: `${companyBarPositions[idx]}%`, top: '16px', transform: 'translateX(-50%)', width: '84px' }} onMouseEnter={() => setActiveCompanyTooltip(idx)} onMouseLeave={() => setActiveCompanyTooltip(null)}>
-                    {activeCompanyTooltip === idx && (
-                      <div className="absolute bottom-16 z-30 bg-[#073B4C] text-white text-xs rounded-xl p-3 shadow-2xl w-56 border border-white/10 pointer-events-none">
-                        <p className="font-bold text-[#FF7D00] text-sm">{c.production_company}</p>
-                        <div className="mt-1 space-y-0.5 text-gray-200 text-left">
-                          <p><span className="text-[#8AA79F]">Founded:</span> {bio?.founded ?? '—'}</p>
-                          <p><span className="text-[#8AA79F]">Country:</span> {bio?.country ?? 'Unknown'}</p>
-                          <p><span className="text-[#8AA79F]">Net worth:</span> {bio?.netWorth ?? '—'}</p>
-                          <p><span className="text-[#8AA79F]">Leadership:</span> {bio?.ceo ?? '—'}</p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-8 w-full">
+            <div id="movie-company-container" className="relative bg-white p-6 pb-12 rounded-2xl shadow-md w-full min-w-0 flex flex-col justify-between">
+              <ChartDownloader containerId="movie-company-container" filename="movie-companies.png" />
+              <div className="flex items-center justify-between mb-2">
+                <div className="min-w-0 pr-2">
+                  <h2 className="text-lg font-bold text-[#15616D] truncate">Top Production Companies by Total Revenue</h2>
+                  {data?.totalProductionCompanies > 0 && (<p className="text-xs text-gray-400 mt-0.5">Top 5 of {data.totalProductionCompanies.toLocaleString()} production companies in the dataset</p>)}
+                </div>
+                <span className="bg-[#E7ECEF] text-[#15616D] text-xs font-semibold px-3 py-1 rounded-lg shrink-0">Revenue Leaders</span>
+              </div>
+              <div className="relative h-60 w-full flex items-center justify-center">
+                <canvas ref={companyCanvasRef} id="companyChart"></canvas>
+              </div>
+              <div className="relative mt-4 pt-4 border-t border-gray-100 w-full" style={{ height: '100px' }}>
+                {(data?.companyStats ?? []).map((c, idx) => {
+                  const bio = COMPANY_BIOS[c.production_company];
+                  return (
+                    <div key={c.production_company} className="absolute flex flex-col items-center justify-start cursor-pointer text-center group" style={{ left: `${companyBarPositions[idx]}%`, top: '16px', transform: 'translateX(-50%)', width: '84px' }} onMouseEnter={() => setActiveCompanyTooltip(idx)} onMouseLeave={() => setActiveCompanyTooltip(null)}>
+                      {activeCompanyTooltip === idx && (
+                        <div className="absolute bottom-16 z-30 bg-[#073B4C] text-white text-xs rounded-xl p-3 shadow-2xl w-56 border border-white/10 pointer-events-none">
+                          <p className="font-bold text-[#FF7D00] text-sm">{c.production_company}</p>
+                          <div className="mt-1 space-y-0.5 text-gray-200 text-left">
+                            <p><span className="text-[#8AA79F]">Founded:</span> {bio?.founded ?? '—'}</p>
+                            <p><span className="text-[#8AA79F]">Country:</span> {bio?.country ?? 'Unknown'}</p>
+                            <p><span className="text-[#8AA79F]">Net worth:</span> {bio?.netWorth ?? '—'}</p>
+                            <p><span className="text-[#8AA79F]">Leadership:</span> {bio?.ceo ?? '—'}</p>
+                          </div>
+                          <div className="absolute -bottom-1.5 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-[#073B4C] rotate-45 border-r border-b border-white/10"></div>
                         </div>
-                        <div className="absolute -bottom-1.5 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-[#073B4C] rotate-45 border-r border-b border-white/10"></div>
+                      )}
+                      <div className="w-14 h-14 rounded-full p-0.5 bg-gradient-to-tr from-[#FF7D00] to-[#15616D] shadow-md group-hover:scale-110 transition duration-300 flex items-center justify-center overflow-hidden shrink-0 mx-auto">
+                        <div className="w-full h-full rounded-full bg-white flex items-center justify-center p-1.5">
+                          <img src={resolveLogo(bio) ?? FALLBACK_LOGO} alt={c.production_company} className="w-full h-full object-contain" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = FALLBACK_LOGO; }} />
+                        </div>
                       </div>
-                    )}
-                    <div className="w-14 h-14 rounded-full p-0.5 bg-gradient-to-tr from-[#FF7D00] to-[#15616D] shadow-md group-hover:scale-110 transition duration-300 flex items-center justify-center overflow-hidden shrink-0 mx-auto">
-                      <div className="w-full h-full rounded-full bg-white flex items-center justify-center p-1.5">
-                        <img src={resolveLogo(bio) ?? FALLBACK_LOGO} alt={c.production_company} className="w-full h-full object-contain" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = FALLBACK_LOGO; }} />
-                      </div>
+                      <span className="text-[10px] font-bold text-[#073B4C] mt-1.5 block w-full truncate px-0.5">{c.production_company}</span>
+                      <span className="text-[9px] text-gray-400 block w-full truncate px-0.5">{c.percentage_of_total}%</span>
                     </div>
-                    <span className="text-[10px] font-bold text-[#073B4C] mt-1.5 block w-full truncate px-0.5">{c.production_company}</span>
-                    <span className="text-[9px] text-gray-400 block w-full truncate px-0.5">{c.percentage_of_total}%</span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
 
-        <TvDashboard />
-        </>
-      )}
+          <TvDashboard />
+        </div>
       </main>
 
       <footer className="bg-[#073B4C] text-white mt-16 py-8 border-t border-white/10">
