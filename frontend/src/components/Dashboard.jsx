@@ -209,13 +209,20 @@ export default function Dashboard() {
       </header>
 
       <div className="bg-white border-b border-gray-200 sticky top-[72px] sm:top-[76px] z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex gap-1">
-          <button onClick={() => setCurrentPage('overview')} className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${currentPage === 'overview' ? 'border-[#FF7D00] text-[#15616D]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>Overview</button>
-          <button onClick={() => setCurrentPage('analytics')} className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${currentPage === 'analytics' ? 'border-[#FF7D00] text-[#15616D]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>Full Analytics</button>
-        </div>
-        {/* Swipe Hint for Mobile */}
-        <div className="text-center pb-2 text-[10px] text-gray-400 font-medium sm:hidden">
-          Swipe left or right to change views
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+          <div className="flex gap-1">
+            <button onClick={() => setCurrentPage('overview')} className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${currentPage === 'overview' ? 'border-[#FF7D00] text-[#15616D]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>Overview</button>
+            <button onClick={() => setCurrentPage('analytics')} className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${currentPage === 'analytics' ? 'border-[#FF7D00] text-[#15616D]' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>Full Analytics</button>
+          </div>
+
+          {/* Swipe Arrow Indicator (Mobile only) */}
+          <div className="sm:hidden flex items-center pr-2 animate-pulse text-[#FF7D00]">
+            {currentPage === 'overview' ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"></path></svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"></path></svg>
+            )}
+          </div>
         </div>
       </div>
 
