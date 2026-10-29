@@ -16,7 +16,7 @@ persist across restarts — acceptable for local dev.
 
 import os
 
-from flask import Flask
+from flask import Flask, jsonify
 from flask_compress import Compress
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -54,6 +54,20 @@ app.register_blueprint(tv_bp)
 
 # Note: The @limiter.exempt decorators for health checks live directly in
 # routes/movies.py and routes/tv.py, applied at the function definition.
+
+
+@app.route("/api/ratelimit-status")
+def ratelimit_status():
+    """Diagnostic endpoint — reports what storage backend the limiter is using."""
+    raw = os.getenv("UPSTASH_REDIS_URL") or ""
+    return jsonify({
+        "env_var_present": bool(raw),
+        "env_var_prefix": raw[:10] if raw else "MISSING",
+        "env_var_length": len(raw),
+        "configured_storage": app.config.get("RATELIMIT_STORAGE_URI", "")[:10],
+        "limiter_storage_type": type(limiter._storage).__name__ if hasattr(limiter, "_storage") and limiter._storage else "None",
+    })
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000, threaded=True)
