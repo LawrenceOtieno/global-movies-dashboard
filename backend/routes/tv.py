@@ -205,6 +205,7 @@ def fetch_from_tmdb_tv_live(title: str):
 
 # ---------- Routes ----------
 @tv_bp.route("/health", methods=["GET"])
+@limiter.exempt
 def health_check():
     return jsonify({
         "status": "healthy",

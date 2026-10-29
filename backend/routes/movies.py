@@ -243,6 +243,7 @@ def build_soup_from_row(row) -> str:
 
 # ---------- Routes ----------
 @movies_bp.route("/api/health", methods=["GET"])
+@limiter.exempt
 def health_check():
     return jsonify({
         "status": "healthy",

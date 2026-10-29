@@ -52,8 +52,8 @@ limiter.init_app(app)
 app.register_blueprint(movies_bp)
 app.register_blueprint(tv_bp)
 
-# Exempt the health check so the cron pinger never gets blocked
-limiter.exempt(movies_bp.view_functions["movies.health_check"])
+# Note: The @limiter.exempt decorators for health checks live directly in
+# routes/movies.py and routes/tv.py, applied at the function definition.
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000, threaded=True)
