@@ -1,17 +1,5 @@
 """
 app.py — thin Flask entry point.
-
-All actual logic lives in routes/movies.py and routes/tv.py as Blueprints —
-this file just creates the app, enables CORS, registers both Blueprints,
-and runs the dev server.
-
-CORS is restricted to a known allowlist. In production the Vercel
-frontend URL is provided via the ALLOWED_ORIGINS environment variable
-(comma-separated list).
-
-Rate limiting uses Upstash Redis (UPSTASH_REDIS_URL). Falls back to
-in-memory storage if the env var is missing, which means limits won't
-persist across restarts — acceptable for local dev.
 """
 
 import os
@@ -22,21 +10,16 @@ from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from extensions import limiter, get_client_ip
-from routes.movies import movies_bp
-from routes.tv import tv_bp
 
+# --- Create app and initialize extensions BEFORE importing blueprints ---
 app = Flask(__name__)
 
-# Trust Cloudflare + Render's proxy layers. x_for=3 accounts for the
-# full chain: real client → Cloudflare → Render internal proxy → app.
-# (The limiter itself uses CF-Connecting-IP directly, but ProxyFix is
-# still needed so Flask's request.remote_addr reflects the real IP.)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=3, x_proto=1, x_host=1)
 
-# --- CORS allowlist ---
+# CORS
 ALLOWED_ORIGINS = [
-    "http://localhost:5173",   # Vite dev server
-    "http://localhost:3000",   # CRA dev server (fallback)
+    "http://localhost:5173",
+    "http://localhost:3000",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
 ]
@@ -47,10 +30,13 @@ if _extra:
 CORS(app, origins=ALLOWED_ORIGINS)
 Compress(app)
 
-# --- Rate Limiting ---
-# Configure storage via config, then bind limiter to app
+# Rate Limiting — MUST be initialized BEFORE importing blueprints
 app.config["RATELIMIT_STORAGE_URI"] = os.getenv("UPSTASH_REDIS_URL", "memory://")
 limiter.init_app(app)
+
+# NOW import and register blueprints (their @limiter.limit decorators will work)
+from routes.movies import movies_bp
+from routes.tv import tv_bp
 
 app.register_blueprint(movies_bp)
 app.register_blueprint(tv_bp)
@@ -62,15 +48,8 @@ def ratelimit_status():
     raw = os.getenv("UPSTASH_REDIS_URL") or ""
     return jsonify({
         "env_var_present": bool(raw),
-        "env_var_prefix": raw[:10] if raw else "MISSING",
-        "env_var_length": len(raw),
-        "configured_storage": app.config.get("RATELIMIT_STORAGE_URI", "")[:10],
         "limiter_storage_type": type(limiter._storage).__name__ if hasattr(limiter, "_storage") and limiter._storage else "None",
-        # --- IP diagnostics ---
-        "remote_addr": request.remote_addr,
         "limiter_sees_ip": get_client_ip(),
-        "x_forwarded_for": request.headers.get("X-Forwarded-For", "NOT SET"),
-        "cf_connecting_ip": request.headers.get("CF-Connecting-IP", "NOT SET"),
     })
 
 
