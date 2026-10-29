@@ -16,9 +16,10 @@ persist across restarts — acceptable for local dev.
 
 import os
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_compress import Compress
 from flask_cors import CORS
+from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from extensions import limiter
@@ -52,13 +53,10 @@ limiter.init_app(app)
 app.register_blueprint(movies_bp)
 app.register_blueprint(tv_bp)
 
-# Note: The @limiter.exempt decorators for health checks live directly in
-# routes/movies.py and routes/tv.py, applied at the function definition.
-
 
 @app.route("/api/ratelimit-status")
 def ratelimit_status():
-    """Diagnostic endpoint — reports what storage backend the limiter is using."""
+    """TEMPORARY diagnostic endpoint — delete after debugging is done."""
     raw = os.getenv("UPSTASH_REDIS_URL") or ""
     return jsonify({
         "env_var_present": bool(raw),
@@ -66,6 +64,11 @@ def ratelimit_status():
         "env_var_length": len(raw),
         "configured_storage": app.config.get("RATELIMIT_STORAGE_URI", "")[:10],
         "limiter_storage_type": type(limiter._storage).__name__ if hasattr(limiter, "_storage") and limiter._storage else "None",
+        # --- IP diagnostics (added) ---
+        "remote_addr": request.remote_addr,
+        "limiter_sees_ip": get_remote_address(),
+        "x_forwarded_for": request.headers.get("X-Forwarded-For", "NOT SET"),
+        "cf_connecting_ip": request.headers.get("CF-Connecting-IP", "NOT SET"),
     })
 
 
