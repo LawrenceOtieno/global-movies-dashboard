@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from pinecone import Pinecone
 
 from config import TMDB_API_KEY, TMDB_BASE_URL, fetch_tmdb_genre_map
+from extensions import limiter
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
@@ -266,6 +267,7 @@ def cult_classics():
 
 
 @tv_bp.route("/recommend", methods=["GET"])
+@limiter.limit("15 per minute")
 def recommend():
     title = request.args.get("title", "").strip()
     n = int(request.args.get("n", 10))

@@ -9,8 +9,9 @@ CORS is restricted to a known allowlist. In production the Vercel
 frontend URL is provided via the ALLOWED_ORIGINS environment variable
 (comma-separated list).
 
-threaded=True matters: without it, Flask's dev server handles one request
-at a time, so a single slow call blocks every other request.
+Rate limiting uses Upstash Redis (UPSTASH_REDIS_URL). Falls back to
+in-memory storage if the env var is missing, which means limits won't
+persist across restarts — acceptable for local dev.
 """
 
 import os
@@ -18,11 +19,16 @@ import os
 from flask import Flask
 from flask_compress import Compress
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 
+from extensions import limiter
 from routes.movies import movies_bp
 from routes.tv import tv_bp
 
 app = Flask(__name__)
+
+# Trust Render's proxy so rate limiting sees the real user IP
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # --- CORS allowlist ---
 ALLOWED_ORIGINS = [
@@ -38,8 +44,16 @@ if _extra:
 CORS(app, origins=ALLOWED_ORIGINS)
 Compress(app)
 
+# --- Rate Limiting ---
+# Configure storage via config, then bind limiter to app
+app.config["RATELIMIT_STORAGE_URI"] = os.getenv("UPSTASH_REDIS_URL", "memory://")
+limiter.init_app(app)
+
 app.register_blueprint(movies_bp)
 app.register_blueprint(tv_bp)
+
+# Exempt the health check so the cron pinger never gets blocked
+limiter.exempt(movies_bp.view_functions["health_check"])
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000, threaded=True)
