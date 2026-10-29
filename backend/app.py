@@ -53,7 +53,7 @@ app.register_blueprint(movies_bp)
 app.register_blueprint(tv_bp)
 
 # Exempt the health check so the cron pinger never gets blocked
-limiter.exempt(movies_bp.view_functions["health_check"])
+limiter.exempt(movies_bp.view_functions["movies.health_check"])
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000, threaded=True)
