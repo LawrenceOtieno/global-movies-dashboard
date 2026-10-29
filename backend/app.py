@@ -46,10 +46,34 @@ app.register_blueprint(tv_bp)
 def ratelimit_status():
     """TEMPORARY diagnostic endpoint — delete after debugging is done."""
     raw = os.getenv("UPSTASH_REDIS_URL") or ""
+
+    # Try to read actual rate limit keys from Redis
+    redis_keys = []
+    redis_error = None
+    try:
+        import redis
+        r = redis.from_url(raw)
+        # LIMITER* is the default prefix for flask-limiter v4
+        redis_keys = [k.decode() for k in r.keys("LIMITER*")][:20]
+    except Exception as e:
+        redis_error = str(e)
+
+    # Introspect what limits are registered on the limiter instance
+    limit_strings = []
+    try:
+        for (scope, limit) in limiter.limit_manager._limits:
+            limit_strings.append(str(limit))
+    except Exception:
+        pass
+
     return jsonify({
         "env_var_present": bool(raw),
         "limiter_storage_type": type(limiter._storage).__name__ if hasattr(limiter, "_storage") and limiter._storage else "None",
         "limiter_sees_ip": get_client_ip(),
+        "redis_keys_count": len(redis_keys),
+        "redis_keys_sample": redis_keys,
+        "redis_error": redis_error,
+        "registered_limits": limit_strings,
     })
 
 
