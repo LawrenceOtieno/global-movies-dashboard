@@ -13,4 +13,3 @@ python-dotenv
 pinecone
 upstash-vector
 psycopg[binary]
-flask-limiter[redis]
