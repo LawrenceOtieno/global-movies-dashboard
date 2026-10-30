@@ -107,16 +107,17 @@ CACHED_CULT_CLASSICS = load_cached('movie', 'cult_classics', {"hidden_gems": [],
 print(f"  Loaded analytics in {time.time() - _t0:.2f}s")
 
 
-# ---------- Fast In-Memory Title Matcher ----------
-print("Loading titles for in-memory matcher...")
+# ---------- Fast In-Memory Title Matcher (from local JSON) ----------
+print("Loading titles for in-memory matcher from disk...")
 _t0 = time.time()
-with engine.connect() as conn:
-    # FIX: Cast vote_count (TEXT) to INTEGER for comparison
-    rows = conn.execute(text(
-        "SELECT DISTINCT title FROM movies WHERE title IS NOT NULL AND CAST(vote_count AS INTEGER) >= 5"
-    )).fetchall()
-FUZZY_TITLES = [r[0] for r in rows if r[0]]
-print(f"  In-memory matcher ready: {len(FUZZY_TITLES):,} titles in {time.time() - _t0:.1f}s")
+FUZZY_TITLES_PATH = os.path.join(CACHE_DIR, 'movie_fuzzy_titles.json')
+try:
+    with open(FUZZY_TITLES_PATH) as f:
+        FUZZY_TITLES = json.load(f)
+    print(f"  In-memory matcher ready: {len(FUZZY_TITLES):,} titles in {time.time() - _t0:.2f}s")
+except FileNotFoundError:
+    print(f"  WARNING: {FUZZY_TITLES_PATH} not found. Fuzzy matching disabled.")
+    FUZZY_TITLES = []
 
 
 def find_fuzzy_match(title: str, threshold: float = 0.75):

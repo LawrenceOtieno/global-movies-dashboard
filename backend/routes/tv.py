@@ -98,16 +98,17 @@ CACHED_CULT_CLASSICS = load_cached('tv', 'cult_classics', {"hidden_gems": [], "o
 print(f"  Loaded TV analytics in {time.time() - _t0:.2f}s")
 
 
-# ---------- Fast In-Memory Title Matcher ----------
-print("Loading TV titles for in-memory matcher...")
+# ---------- Fast In-Memory Title Matcher (from local JSON) ----------
+print("Loading TV titles for in-memory matcher from disk...")
 _t0 = time.time()
-with engine.connect() as conn:
-    # FIX: Cast vote_count (TEXT) to INTEGER for comparison
-    rows = conn.execute(text(
-        "SELECT DISTINCT name FROM tv_shows WHERE name IS NOT NULL AND CAST(vote_count AS INTEGER) >= 5"
-    )).fetchall()
-FUZZY_NAMES = [r[0] for r in rows if r[0]]
-print(f"  TV in-memory matcher ready: {len(FUZZY_NAMES):,} names in {time.time() - _t0:.1f}s")
+FUZZY_NAMES_PATH = os.path.join(CACHE_DIR, 'tv_fuzzy_titles.json')
+try:
+    with open(FUZZY_NAMES_PATH) as f:
+        FUZZY_NAMES = json.load(f)
+    print(f"  TV in-memory matcher ready: {len(FUZZY_NAMES):,} names in {time.time() - _t0:.2f}s")
+except FileNotFoundError:
+    print(f"  WARNING: {FUZZY_NAMES_PATH} not found. TV fuzzy matching disabled.")
+    FUZZY_NAMES = []
 
 
 def find_fuzzy_match(title: str, threshold: float = 0.75):
