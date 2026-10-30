@@ -268,8 +268,9 @@ def cult_classics():
     return jsonify(CACHED_CULT_CLASSICS)
 
 
-@tv_bp.route("/recommend", methods=["GET"])
+# --- Decorator order swapped: limiter ABOVE route ---
 @limiter.limit("15 per minute")
+@tv_bp.route("/recommend", methods=["GET"])
 def recommend():
     title = request.args.get("title", "").strip()
     n = int(request.args.get("n", 10))
