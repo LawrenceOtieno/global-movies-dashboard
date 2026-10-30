@@ -53,7 +53,6 @@ def ratelimit_status():
     try:
         import redis
         r = redis.from_url(raw)
-        # LIMITER* is the default prefix for flask-limiter v4
         redis_keys = [k.decode() for k in r.keys("LIMITER*")][:20]
     except Exception as e:
         redis_error = str(e)
@@ -66,6 +65,29 @@ def ratelimit_status():
     except Exception:
         pass
 
+    # --- NEW: inspect route-level registration ---
+    route_limits = {}
+    try:
+        if hasattr(limiter, '_route_limits'):
+            for key, limits in limiter._route_limits.items():
+                route_limits[str(key)] = [str(l) for l in limits]
+    except Exception as e:
+        route_limits = {"error": str(e)}
+
+    # --- NEW: check if recommend functions are wrapped by the limiter ---
+    try:
+        from routes.movies import recommend as movie_recommend
+        from routes.tv import recommend as tv_recommend
+        movie_wrapped = hasattr(movie_recommend, '__wrapped__')
+        tv_wrapped = hasattr(tv_recommend, '__wrapped__')
+        movie_module = movie_recommend.__module__
+        movie_name = movie_recommend.__name__
+    except Exception as e:
+        movie_wrapped = f"error: {e}"
+        tv_wrapped = f"error: {e}"
+        movie_module = "unknown"
+        movie_name = "unknown"
+
     return jsonify({
         "env_var_present": bool(raw),
         "limiter_storage_type": type(limiter._storage).__name__ if hasattr(limiter, "_storage") and limiter._storage else "None",
@@ -74,6 +96,13 @@ def ratelimit_status():
         "redis_keys_sample": redis_keys,
         "redis_error": redis_error,
         "registered_limits": limit_strings,
+        # --- New diagnostic fields ---
+        "route_limits_count": len(route_limits),
+        "route_limits_keys": list(route_limits.keys())[:10],
+        "movie_recommend_module": movie_module,
+        "movie_recommend_name": movie_name,
+        "movie_recommend_has_wrapped": movie_wrapped,
+        "tv_recommend_has_wrapped": tv_wrapped,
     })
 
 
