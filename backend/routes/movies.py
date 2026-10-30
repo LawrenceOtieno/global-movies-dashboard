@@ -15,7 +15,6 @@ from dotenv import load_dotenv
 from upstash_vector import Index
 
 from config import TMDB_API_KEY, TMDB_BASE_URL, fetch_tmdb_genre_map
-from extensions import limiter
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
@@ -244,7 +243,6 @@ def build_soup_from_row(row) -> str:
 
 # ---------- Routes ----------
 @movies_bp.route("/api/health", methods=["GET"])
-@limiter.exempt
 def health_check():
     return jsonify({
         "status": "healthy",
@@ -302,8 +300,6 @@ def cult_classics():
     return jsonify(CACHED_CULT_CLASSICS)
 
 
-# --- Decorator order swapped: limiter ABOVE route ---
-@limiter.limit("15 per minute")
 @movies_bp.route("/api/recommend", methods=["GET"])
 def recommend():
     title = request.args.get("title", "").strip()

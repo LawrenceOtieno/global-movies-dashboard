@@ -14,7 +14,6 @@ from dotenv import load_dotenv
 from pinecone import Pinecone
 
 from config import TMDB_API_KEY, TMDB_BASE_URL, fetch_tmdb_genre_map
-from extensions import limiter
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
@@ -206,7 +205,6 @@ def fetch_from_tmdb_tv_live(title: str):
 
 # ---------- Routes ----------
 @tv_bp.route("/health", methods=["GET"])
-@limiter.exempt
 def health_check():
     return jsonify({
         "status": "healthy",
@@ -268,8 +266,6 @@ def cult_classics():
     return jsonify(CACHED_CULT_CLASSICS)
 
 
-# --- Decorator order swapped: limiter ABOVE route ---
-@limiter.limit("15 per minute")
 @tv_bp.route("/recommend", methods=["GET"])
 def recommend():
     title = request.args.get("title", "").strip()
